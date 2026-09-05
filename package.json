@@ -1,0 +1,43 @@
+{
+  "name": "proactive",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -k -n web,broker -c green,cyan \"npm:dev:web\" \"npm:dev:broker\"",
+    "dev:web": "vite --port 5174",
+    "dev:broker": "tsx watch server/src/index.ts",
+    "build": "tsc -b && npm run build:broker && vite build",
+    "build:broker": "tsc -p server/tsconfig.json",
+    "start": "node server/dist/index.js --production",
+    "start:broker": "node server/dist/index.js --production",
+    "preview": "vite preview",
+    "generate": "cargo run -p gen-bindings -- --out-dir src/module_bindings --module-path spacetimedb && prettier --write src/module_bindings",
+    "spacetime:generate": "spacetime generate --lang typescript --out-dir src/module_bindings --module-path spacetimedb",
+    "spacetime:publish:local": "spacetime publish proactive --module-path spacetimedb --server local",
+    "spacetime:publish": "spacetime publish proactive --module-path spacetimedb --server maincloud"
+  },
+  "dependencies": {
+    "@fontsource-variable/ibm-plex-sans": "^5.3.0",
+    "@fontsource/ibm-plex-mono": "^5.3.0",
+    "jose": "^6.2.12",
+    "lucide-react": "^1.41.0",
+    "oidc-client-ts": "^3.5.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-oidc-context": "^3.3.1",
+    "react-router-dom": "^7.18.3",
+    "simple-icons": "^16.29.0",
+    "spacetimedb": "2.10.*"
+  },
+  "devDependencies": {
+    "@types/node": "^26.4.1",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react": "^5.0.2",
+    "concurrently": "^10.0.5",
+    "tsx": "^4.23.13",
+    "typescript": "~5.6.2",
+    "vite": "^7.1.5"
+  }
+}
