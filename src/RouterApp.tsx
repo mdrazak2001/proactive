@@ -12,6 +12,7 @@ import LegalPage from './features/legal/LegalPage';
 import ProductShell from './layouts/ProductShell';
 import { AuthProvider } from './auth/AuthProvider';
 import AuthCallbackPage from './auth/AuthCallbackPage';
+import SpacetimeRoomProvider from './SpacetimeRoomProvider';
 
 const WarRoomRoute = lazy(() => import('./WarRoomRoute'));
 
@@ -57,7 +58,14 @@ export default function RouterApp() {
           <Route path="/auth/callback" element={<AuthCallbackPage />} />
           <Route path="/app" element={<ProductShell />}>
             <Route index element={<Navigate to="integrations" replace />} />
-            <Route path="integrations" element={<IntegrationsPage />} />
+            <Route
+              path="integrations"
+              element={
+                <SpacetimeRoomProvider signInReturnTo="/app/integrations">
+                  <IntegrationsPage />
+                </SpacetimeRoomProvider>
+              }
+            />
             <Route path="services" element={<ProductPlaceholder title="Services" />} />
             <Route path="audit" element={<ProductPlaceholder title="Audit trail" />} />
             <Route path="settings" element={<ProductPlaceholder title="Workspace settings" />} />

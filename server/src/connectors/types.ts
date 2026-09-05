@@ -3,6 +3,7 @@ export const providerIds = [
   'langsmith',
   'supermemory',
   'spacetimedb',
+  'browserbase',
 ] as const;
 
 export type ProviderId = (typeof providerIds)[number];
@@ -16,6 +17,8 @@ export interface SampleSummary {
   kind: string;
   count: number;
   latestAt?: string;
+  sessionId?: string;
+  liveViewUrl?: string;
 }
 
 export interface ConnectorReceipt {

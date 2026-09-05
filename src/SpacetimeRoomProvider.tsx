@@ -168,7 +168,13 @@ function SignInGate({
   );
 }
 
-export default function SpacetimeRoomProvider({ children }: { children: ReactNode }) {
+export default function SpacetimeRoomProvider({
+  children,
+  signInReturnTo = '/demo/war-room',
+}: {
+  children: ReactNode;
+  signInReturnTo?: string;
+}) {
   const { configured, error, idToken, loading, signInWithGoogle, user } = useAuth();
 
   const credential = useMemo<ConnectionCredential | undefined>(() => {
@@ -198,7 +204,7 @@ export default function SpacetimeRoomProvider({ children }: { children: ReactNod
   }
 
   if (configured && !user) {
-    return <SignInGate authError={error} signIn={() => signInWithGoogle('/demo/war-room')} />;
+    return <SignInGate authError={error} signIn={() => signInWithGoogle(signInReturnTo)} />;
   }
 
   if (!credential) {

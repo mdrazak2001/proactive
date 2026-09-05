@@ -8,8 +8,9 @@ The demo is deliberately narrow: determine whether release R42 or Stripe caused 
 
 - SpacetimeDB synchronizes rooms, participants, transcript segments, approvals, agent steps, evidence, conclusions, and the audit timeline.
 - Reducers enforce the investigation state machine and commander-only approval/pause.
-- A server-side connector broker exposes only fixed, bounded reads for Supabase, LangSmith, Supermemory, and an optional separate SpacetimeDB source.
-- The integrations console reports actual configured, verified, error, and offline states. Credentials never enter the browser.
+- Signed-in users can connect their own Supabase and LangSmith sources through fixed, bounded SpacetimeDB procedures. Credentials are submitted once, stored in a private table, and never returned or exposed through client bindings.
+- The server-side connector broker remains the runtime boundary for operator-managed connectors such as Browserbase and Supermemory.
+- The integrations console reports actual configured, verified, error, and offline states. A source is not marked verified until its provider accepts a real read.
 - SpacetimeAuth OIDC code + PKCE is wired in the React client; its ID token is passed to SpacetimeDB and to the broker without being copied into the anonymous demo token store.
 
 The War Room's observability sequence is still seeded for a deterministic demo. No remediation action is available.
@@ -47,7 +48,7 @@ bypass is not honored in production and, in development, requires a loopback
 bind and peer, loopback Host/Origin metadata when present, and no forwarding
 headers. Return the flag to `false` as soon as the smoke test is complete.
 
-For local connector testing, add provider values to `.env.local`, restart the broker, open `/app/integrations`, and press **Verify**. Never prefix a credential with `VITE_`: Vite publishes those values to the browser. The exact variables and provider boundaries are documented in [`server/README.md`](server/README.md); a non-sensitive Supabase demo table is in [`server/sql/supabase-proactive-events.sql`](server/sql/supabase-proactive-events.sql).
+For self-service connector testing, sign in, open `/app/integrations`, and use **Connect** for Supabase or LangSmith. Operator-managed Browserbase and Supermemory values still belong in `.env.local`; never prefix a credential with `VITE_` because Vite publishes those values to the browser. A non-sensitive Supabase demo table is in [`server/sql/supabase-proactive-events.sql`](server/sql/supabase-proactive-events.sql).
 
 ## Run as one production service
 
@@ -82,26 +83,20 @@ The Google secret does not belong in this repository or chat. The SpacetimeAuth 
 
 ## Security status
 
-The broker is currently a **single-workspace private alpha**. One broker process
-loads one server-side set of provider credentials, and every allowlisted pilot
-user can reach those same configured connectors. The allowlists gate access to
-the process; they do not select tenant-specific credentials or connector roles.
-Do not put multiple customer workspaces behind one broker process.
+The module requires a SpacetimeAuth JWT with the exact issuer and application
+audience before accepting a client connection. Supabase and LangSmith records
+are keyed by that sender identity in a private table; only module procedures can
+read them, and procedure responses contain status plus sanitized counts and
+timestamps rather than credentials or provider rows.
 
-Broker hardening does not secure the coordination database. The browser passes
-its SpacetimeAuth ID token to SpacetimeDB, but the current module never checks
-`ctx.senderAuth` for the required JWT, exact issuer, and client audience. Its
-tables are public, and `joinRoom` lets a caller self-select the incident
-commander role. This is the blocking authentication gap for any shared or
-customer deployment: Google login alone does not create a tenant boundary.
-
-Before a private beta, enforce authentication at the module connection/reducer
-boundary, move customer data behind organization-scoped private tables/views,
-assign memberships and commander roles server-side, and store per-workspace
-connector credentials in an encrypted secret vault. Do not connect customer
-production accounts to the public demo room until those controls and the
-same-origin production routing are in place.
+This creates per-user connector isolation, not a complete organization model.
+The seeded incident-room tables are still public to authenticated clients and
+`joinRoom` still allows a caller to choose the incident-commander role. Before a
+customer beta, add organizations, server-assigned memberships and roles, and
+caller-filtered views for all room data. The operator-managed broker remains a
+single-workspace alpha until its global environment credentials are replaced or
+removed.
 
 ## Product boundary
 
-Proactive investigates and prepares. It does not deploy, roll back, email, or change production without a separate explicit approval surface. The next build slice is one real connector feeding one live investigation, followed by Browserbase Live View. Billing comes after that loop works for pilot users.
+Proactive investigates and prepares. It does not deploy, roll back, email, or change production without a separate explicit approval surface. The next build slice is testing one real customer source end to end, then feeding that receipt into the Browserbase-backed live investigation. Billing comes after that loop works for pilot users.

@@ -1,4 +1,4 @@
-export const liveProviderIds = ['supabase', 'langsmith', 'supermemory', 'spacetimedb'] as const;
+export const liveProviderIds = ['supabase', 'langsmith', 'supermemory', 'spacetimedb', 'browserbase'] as const;
 
 export type LiveProviderId = (typeof liveProviderIds)[number];
 export type ConnectionState =
@@ -78,7 +78,7 @@ const unwrapReceipt = (value: unknown): Record<string, unknown> => {
   return value;
 };
 
-function normalizeConnector(value: unknown, fallbackProvider?: string): ConnectorStatus | undefined {
+export function normalizeConnector(value: unknown, fallbackProvider?: string): ConnectorStatus | undefined {
   const raw = unwrapReceipt(value);
   const provider = readProviderId(raw, fallbackProvider);
   if (!provider) return undefined;
@@ -153,6 +153,26 @@ async function brokerFetch(path: string, init?: RequestInit, idToken?: string) {
 
 export async function getConnectorStatuses(signal?: AbortSignal, idToken?: string): Promise<StatusSnapshot> {
   const payload = await brokerFetch('/api/integrations/status', { signal }, idToken);
+  return normalizeStatusSnapshot(payload);
+}
+
+export function normalizeReceipt(payload: unknown, provider: LiveProviderId, fallbackState: ConnectionState): ConnectorReceipt {
+  const normalized = normalizeConnector(payload, provider);
+  if (!normalized) {
+    return { provider, status: fallbackState, scope: [], sample: payload };
+  }
+  return { ...normalized, status: normalized.status === 'configured' ? fallbackState : normalized.status };
+}
+
+export function parseProcedurePayload(value: string): unknown {
+  try {
+    return JSON.parse(value) as unknown;
+  } catch {
+    throw new BrokerRequestError('SpacetimeDB returned an invalid connector receipt.');
+  }
+}
+
+export function normalizeStatusSnapshot(payload: unknown): StatusSnapshot {
   const root = isRecord(payload) ? payload : {};
   const source = root.providers ?? root.integrations ?? root;
   const providers: StatusSnapshot['providers'] = {};
@@ -173,14 +193,6 @@ export async function getConnectorStatuses(signal?: AbortSignal, idToken?: strin
     providers,
     brokerMessage: asString(root.message) ?? asString(root.brokerMessage),
   };
-}
-
-function normalizeReceipt(payload: unknown, provider: LiveProviderId, fallbackState: ConnectionState): ConnectorReceipt {
-  const normalized = normalizeConnector(payload, provider);
-  if (!normalized) {
-    return { provider, status: fallbackState, scope: [], sample: payload };
-  }
-  return { ...normalized, status: normalized.status === 'configured' ? fallbackState : normalized.status };
 }
 
 export async function verifyConnector(provider: LiveProviderId, idToken?: string): Promise<ConnectorReceipt> {
@@ -217,6 +229,8 @@ export function formatSafeSample(value: unknown) {
     service: 'Service',
     table: 'Table',
     summary: 'Summary',
+    sessionId: 'Session',
+    liveViewUrl: 'Live view',
   };
   const safeFacts = Object.entries(labels).flatMap(([key, label]) => {
     const item = value[key];

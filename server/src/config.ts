@@ -36,6 +36,11 @@ export interface BrokerConfig {
     sourceTable?: string;
     token?: string;
   };
+  browserbase: {
+    apiKey?: string;
+    projectId?: string;
+    baseUrl: string;
+  };
 }
 
 function optional(env: NodeJS.ProcessEnv, name: string): string | undefined {
@@ -163,10 +168,23 @@ export function loadConfig(
         'What recent incident context is relevant?',
     },
     spacetime: {
-      host: optional(env, 'SPACETIME_SOURCE_HOST'),
-      database: optional(env, 'SPACETIME_SOURCE_DATABASE'),
-      sourceTable: optional(env, 'SPACETIME_SOURCE_TABLE'),
+      host:
+        optional(env, 'SPACETIME_SOURCE_HOST') ??
+        optional(env, 'VITE_SPACETIMEDB_HOST') ??
+        optional(env, 'SPACETIMEDB_HOST'),
+      database:
+        optional(env, 'SPACETIME_SOURCE_DATABASE') ??
+        optional(env, 'VITE_SPACETIMEDB_DB_NAME') ??
+        optional(env, 'SPACETIMEDB_DB_NAME'),
+      sourceTable: optional(env, 'SPACETIME_SOURCE_TABLE') ?? 'incident_room',
       token: optional(env, 'SPACETIME_SOURCE_TOKEN'),
+    },
+    browserbase: {
+      apiKey: optional(env, 'BROWSERBASE_API_KEY'),
+      projectId: optional(env, 'BROWSERBASE_PROJECT_ID'),
+      baseUrl: withoutTrailingSlash(
+        optional(env, 'BROWSERBASE_BASE_URL') ?? 'https://api.browserbase.com',
+      ),
     },
   };
 }

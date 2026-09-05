@@ -41,6 +41,27 @@ export const Conclusion = __t.object("Conclusion", {
 });
 export type Conclusion = __Infer<typeof Conclusion>;
 
+export const ConnectorCredential = __t.object("ConnectorCredential", {
+  id: __t.string(),
+  owner: __t.identity(),
+  provider: __t.string(),
+  secretJson: __t.string(),
+  settingsJson: __t.string(),
+  status: __t.string(),
+  sampleJson: __t.string(),
+  createdAt: __t.timestamp(),
+  checkedAt: __t.timestamp(),
+});
+export type ConnectorCredential = __Infer<typeof ConnectorCredential>;
+
+export const ConnectorRequestGate = __t.object("ConnectorRequestGate", {
+  id: __t.string(),
+  owner: __t.identity(),
+  provider: __t.string(),
+  lastAttemptAt: __t.timestamp(),
+});
+export type ConnectorRequestGate = __Infer<typeof ConnectorRequestGate>;
+
 export const Evidence = __t.object("Evidence", {
   id: __t.u64(),
   requestId: __t.u64(),

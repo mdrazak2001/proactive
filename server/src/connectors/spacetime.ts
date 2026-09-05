@@ -7,12 +7,13 @@ import {
   validDatabaseIdentifier,
   validSimpleIdentifier,
 } from './shared.js';
+import { currentBearerToken } from './call-context.js';
 import type { Connector, ConnectorQueryResult, ConnectorReceipt } from './types.js';
 
 export function createSpacetimeConnector(config: BrokerConfig): Connector {
   const provider = 'SpacetimeDB source';
   const credentialBoundary =
-    'curated table access; broker-enforced SELECT-only query';
+    'caller SpacetimeAuth ID token; broker-enforced SELECT-only query';
   const scope = ['sql:select', 'configured table only'];
 
   function configuration() {
@@ -37,7 +38,7 @@ export function createSpacetimeConnector(config: BrokerConfig): Connector {
       host: safeSpacetimeBaseUrl(config.spacetime.host) as string,
       database: config.spacetime.database as string,
       table: config.spacetime.sourceTable as string,
-      token: config.spacetime.token,
+      token: currentBearerToken() ?? config.spacetime.token,
     };
   }
 

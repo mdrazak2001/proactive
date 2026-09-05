@@ -447,6 +447,59 @@
 .environment-keys li { min-height: 28px; display: inline-flex; align-items: center; padding: 0 7px; border: 1px solid var(--pro-line); border-radius: 4px; color: var(--pro-muted); background: var(--pro-control); }
 .environment-keys code { font: 500 8px/1.25 'IBM Plex Mono', monospace; overflow-wrap: anywhere; }
 
+.connector-form {
+  display: grid;
+  gap: 16px;
+  margin: 0 0 20px;
+  padding: 16px;
+  border: 1px solid var(--pro-line);
+  border-radius: 7px;
+  background: var(--pro-inset, #090c0b);
+}
+
+.connector-form__heading { display: grid; gap: 6px; }
+.connector-form__heading > span { color: var(--pro-signal); font: 500 8px/1.3 'IBM Plex Mono', monospace; letter-spacing: 0.1em; }
+.connector-form__heading > strong { font-size: 13px; font-weight: 540; }
+.connector-form__heading > p { margin: 0; color: var(--pro-muted); font-size: 10px; line-height: 1.5; }
+.connector-form label { display: grid; gap: 7px; }
+.connector-form label > span { color: var(--pro-paper); font-size: 10px; font-weight: 520; }
+.connector-form label > small { color: var(--pro-quiet); font-size: 9px; line-height: 1.45; }
+.connector-form input,
+.connector-form select {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 11px;
+  border: 1px solid var(--pro-line);
+  border-radius: 5px;
+  outline: 0;
+  color: var(--pro-paper);
+  background: var(--pro-control);
+  font: 400 11px/1.3 'IBM Plex Mono', monospace;
+}
+.connector-form input::placeholder { color: var(--pro-quiet); }
+.connector-form input:focus,
+.connector-form select:focus { border-color: rgba(185, 255, 102, 0.48); box-shadow: 0 0 0 2px rgba(185, 255, 102, 0.08); }
+.connector-form input:disabled,
+.connector-form select:disabled { cursor: wait; opacity: 0.56; }
+.connector-form__receipt,
+.saved-connection {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 11px;
+  border: 1px solid rgba(185, 255, 102, 0.16);
+  border-radius: 5px;
+  color: var(--pro-signal);
+  background: rgba(185, 255, 102, 0.025);
+}
+.connector-form__receipt > svg,
+.saved-connection > svg { flex: 0 0 auto; margin-top: 1px; }
+.connector-form__receipt > span,
+.saved-connection > span { display: grid; gap: 3px; color: var(--pro-muted); font-size: 9px; line-height: 1.45; }
+.connector-form__receipt strong,
+.saved-connection strong { color: var(--pro-signal); font-size: 10px; font-weight: 540; }
+.saved-connection { margin: 0 0 18px; }
+
 .access-spec { margin: 0; border-top: 1px solid var(--pro-line); }
 .access-spec > div { display: grid; grid-template-columns: 126px minmax(0, 1fr); gap: 16px; padding: 13px 0; border-bottom: 1px solid var(--pro-line); }
 .access-spec dt { color: var(--pro-quiet); font-size: 10px; }
@@ -520,6 +573,7 @@
 .drawer-button { min-height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 0 12px; border: 1px solid var(--pro-line); border-radius: 6px; color: var(--pro-paper); font-size: 11px; background: var(--pro-raised); cursor: pointer; }
 .drawer-button--quiet { color: var(--pro-muted); background: transparent; }
 .drawer-button--primary { border-color: var(--pro-signal); color: var(--pro-night); background: var(--pro-signal); font-weight: 570; }
+.drawer-button--danger { border-color: rgba(255, 116, 104, 0.18); color: var(--pro-fault); background: transparent; }
 .drawer-button:hover:not(:disabled) { filter: brightness(1.08); }
 .drawer-button:disabled { cursor: not-allowed; opacity: 0.42; }
 

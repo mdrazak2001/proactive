@@ -1,8 +1,11 @@
 # Connector broker
 
-This is the trusted, local server boundary for Proactive integrations. Provider
-credentials are loaded from the repository-root `.env.local`, used only on the
-server, and never returned by an API response. All four query routes run fixed,
+This is the trusted server boundary for operator-managed Proactive integrations
+such as Browserbase and Supermemory, plus legacy environment-based connector
+checks. External-user Supabase and LangSmith connections now use the private
+SpacetimeDB connector table and typed module procedures described in the root
+README. Broker credentials are loaded from `.env.local`, used only on the
+server, and never returned by an API response. All query routes run fixed,
 bounded reads; callers cannot submit SQL, filters, project IDs, or provider URLs.
 Fetched provider records are summarized inside the broker and discarded; the
 browser receives a count/timestamp receipt, never record content.
@@ -41,7 +44,7 @@ broker and provider credentials must be supplied only as runtime settings.
 
 The broker then verifies the bearer ID token's signature, issuer, audience,
 expiry, issued-at time, subject, and authorized party from OIDC discovery/JWKS.
-This alpha is deliberately one workspace per broker process: all configured
+The broker path is deliberately one workspace per process: all configured
 provider credentials are shared by every authorized user of that workspace.
 Allowlists gate the process; they do not map users to separate credentials or
 connector roles. Do not serve multiple customer workspaces from one alpha
@@ -69,23 +72,21 @@ development.
   `{ receipt }` for one bounded sample summary. Provider rows/content are never
   included in the response.
 
-Supported provider IDs are `supabase`, `langsmith`, `supermemory`, and
-`spacetimedb`. Other routes, methods, query parameters, and request fields are
+Supported provider IDs are `supabase`, `langsmith`, `supermemory`, `spacetimedb`,
+and `browserbase`. Other routes, methods, query parameters, and request fields are
 rejected. Requests are capped at 4 KiB; upstream calls time out after 10 seconds
 and responses are capped at 1 MiB. Errors are sanitized before they reach the
 browser or logs. Each authenticated principal is limited to 30 verify/query
 requests per minute and two concurrent provider requests.
 
-## Coordination-module authentication blocker
+## Coordination-module boundary
 
-This broker authorizes connector API calls only; it does not authorize the
-Proactive coordination database. Although the browser supplies its
-SpacetimeAuth ID token to SpacetimeDB, the current TypeScript module does not
-inspect `ctx.senderAuth` to require a JWT with the exact issuer and client
-audience. Its tables are public, and callers can currently choose their own room
-role, including incident commander. A shared or customer deployment is blocked
-until the module enforces that authentication boundary, keeps organization data
-private, and assigns membership and roles server-side.
+The module now rejects connections without a SpacetimeAuth JWT for the exact
+issuer and client audience. Its private connector table is keyed by sender
+identity and omitted from client bindings. The demo incident-room tables are
+still public to authenticated clients, however, and callers can choose their own
+room role. Organization-scoped private room data and server-assigned membership
+remain required before a customer beta.
 
 ## Provider boundaries
 
@@ -118,12 +119,11 @@ keys may still permit writes; this broker exposes read calls only.
 
 ### SpacetimeDB source
 
-This configuration is deliberately separate from the Proactive coordination
-database. It permits one fixed
-`SELECT 1 FROM <validated_table> LIMIT 5`; verification uses that target with
-`LIMIT 1`. No table columns or rows are returned. Use a curated public table or a
-non-owner OIDC identity with the intended row policy. Never use a database-owner
-or CLI publisher token: owner SQL bypasses table visibility.
+This reuses the same Maincloud database and SpacetimeAuth identity already
+used by the room. The broker forwards the caller's ID token and runs a fixed
+`SELECT 1 FROM incident_room LIMIT n`. Do not configure a database-owner or CLI
+publisher token. Override host/database/table only if you need a separate
+curated source.
 
 Official references:
 

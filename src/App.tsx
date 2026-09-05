@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { reducers, tables } from './module_bindings';
 import { useReducer, useSpacetimeDB, useTable } from 'spacetimedb/react';
+import LiveViewPane from './features/war-room/LiveViewPane';
+import { useBrowserbaseLiveView } from './features/war-room/useBrowserbaseLiveView';
 import './App.css';
 
 const ROOM_ID = 'checkout-r42';
@@ -157,15 +159,17 @@ function TelemetryChart({ stepCount }: { stepCount: number }) {
   );
 }
 
-function AgentComputer({ request, steps, evidenceRows, conclusionRow }: {
+function AgentComputer({ request, steps, evidenceRows, conclusionRow, liveViewUrl }: {
   request: any;
   steps: readonly any[];
   evidenceRows: readonly any[];
   conclusionRow: any;
+  liveViewUrl?: string;
 }) {
   const running = request?.status === 'running';
   const waiting = request && ['proposed', 'edited', 'approved'].includes(request.status);
   const latestStep = steps.length > 0 ? steps[steps.length - 1] : undefined;
+  const showLiveView = Boolean(liveViewUrl) && (running || request?.status === 'ready_to_review');
 
   return (
     <section className="agent-panel">
@@ -180,7 +184,9 @@ function AgentComputer({ request, steps, evidenceRows, conclusionRow }: {
       <div className={`computer-frame ${running ? 'is-running' : ''}`}>
         <div className="computer-chrome">
           <div className="computer-dots"><i /><i /><i /></div>
-          <div className="computer-address">observe.proactive.local / checkout-api</div>
+          <div className="computer-address">
+            {showLiveView ? 'browserbase · isolated live view' : 'observe.proactive.local / checkout-api'}
+          </div>
           <div className="computer-live"><span /> LIVE VIEW</div>
         </div>
 
@@ -190,6 +196,8 @@ function AgentComputer({ request, steps, evidenceRows, conclusionRow }: {
             <strong>Waiting for a diagnostic question</strong>
             <p>The agent can inspect the seeded observability console after approval.</p>
           </div>
+        ) : showLiveView && liveViewUrl ? (
+          <LiveViewPane url={liveViewUrl} />
         ) : (
           <div className="observability-console">
             <div className="console-toolbar">
@@ -386,6 +394,7 @@ function App() {
     () => events.filter(item => item.roomId === ROOM_ID).sort((a, b) => compareBigInt(b.id, a.id)).slice(0, 8),
     [events]
   );
+  const liveViewUrl = useBrowserbaseLiveView(request?.status === 'running' || request?.status === 'ready_to_review');
   const isCommander = role === 'Incident commander';
   const executionSurface = useMemo(() => {
     const forcedControl = new URLSearchParams(window.location.search).get('role') === 'control';
@@ -583,7 +592,7 @@ function App() {
           </div>
         </aside>
 
-        <AgentComputer request={request} steps={requestSteps} evidenceRows={requestEvidence} conclusionRow={conclusionRow} />
+        <AgentComputer request={request} steps={requestSteps} evidenceRows={requestEvidence} conclusionRow={conclusionRow} liveViewUrl={liveViewUrl} />
 
         <aside className="rail-panel">
           <InvestigationOrder

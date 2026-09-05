@@ -48,6 +48,12 @@ import ResetDemoReducer from "./reset_demo_reducer";
 import StartInvestigationReducer from "./start_investigation_reducer";
 
 // Import all procedure arg schemas
+import * as ConnectLangsmithProcedure from "./connect_langsmith_procedure";
+import * as ConnectSupabaseProcedure from "./connect_supabase_procedure";
+import * as DisconnectConnectorConnectionProcedure from "./disconnect_connector_connection_procedure";
+import * as ListConnectorConnectionsProcedure from "./list_connector_connections_procedure";
+import * as SampleConnectorConnectionProcedure from "./sample_connector_connection_procedure";
+import * as VerifyConnectorConnectionProcedure from "./verify_connector_connection_procedure";
 
 // Import all table schema definitions
 import AgentStepRow from "./agent_step_table";
@@ -204,6 +210,12 @@ const reducersSchema = __reducers(
 
 /** The schema information for all procedures in this module. This is defined the same way as the procedures would have been defined in the server. */
 const proceduresSchema = __procedures(
+  __procedureSchema("connect_langsmith", ConnectLangsmithProcedure.params, ConnectLangsmithProcedure.returnType),
+  __procedureSchema("connect_supabase", ConnectSupabaseProcedure.params, ConnectSupabaseProcedure.returnType),
+  __procedureSchema("disconnect_connector_connection", DisconnectConnectorConnectionProcedure.params, DisconnectConnectorConnectionProcedure.returnType),
+  __procedureSchema("list_connector_connections", ListConnectorConnectionsProcedure.params, ListConnectorConnectionsProcedure.returnType),
+  __procedureSchema("sample_connector_connection", SampleConnectorConnectionProcedure.params, SampleConnectorConnectionProcedure.returnType),
+  __procedureSchema("verify_connector_connection", VerifyConnectorConnectionProcedure.params, VerifyConnectorConnectionProcedure.returnType),
 );
 
 type __SchemaWithTableAccessorAliases = Omit<typeof tablesSchema.schemaType, "tables"> & {

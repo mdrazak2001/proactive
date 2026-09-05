@@ -504,8 +504,13 @@ button:active:not(:disabled) {
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.3), 0 16px 60px rgba(0, 0, 0, 0.18);
 }
 
-.computer-frame.is-running {
-  border-color: rgba(185, 255, 102, 0.22);
+.computer-live-view {
+  display: block;
+  width: 100%;
+  min-height: 390px;
+  border: 0;
+  background: #050807;
+  pointer-events: none;
 }
 
 .computer-chrome {

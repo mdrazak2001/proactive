@@ -4,8 +4,9 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { extname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
-import { createAuthorizer } from './auth.js';
+import { createAuthorizer, parseBearer } from './auth.js';
 import { loadConfig } from './config.js';
+import { connectorCallContext } from './connectors/call-context.js';
 import {
   createConnectors,
   providerIds,
@@ -356,10 +357,14 @@ async function dispatchBrokerRequest(
     await principalLimiter.run(
       principal,
       () =>
-        runConnectorOperation(
-          connector,
-          operationMatch[2] === 'verify' ? 'verify' : 'query',
-          response,
+        connectorCallContext.run(
+          { bearerToken: parseBearer(request.headers.authorization) },
+          () =>
+            runConnectorOperation(
+              connector,
+              operationMatch[2] === 'verify' ? 'verify' : 'query',
+              response,
+            ),
         ),
     );
     return;

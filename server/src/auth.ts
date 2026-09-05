@@ -63,7 +63,7 @@ function hasOnlyLoopbackRequestMetadata(request: IncomingMessage): boolean {
   }
 }
 
-function parseBearer(header: string | undefined): string | undefined {
+export function parseBearer(header: string | undefined): string | undefined {
   if (!header) return undefined;
   const match = /^Bearer ([A-Za-z0-9_~+./=-]+)$/.exec(header);
   return match?.[1];

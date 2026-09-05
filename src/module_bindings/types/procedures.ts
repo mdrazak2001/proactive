@@ -6,5 +6,23 @@
 import { type Infer as __Infer } from "spacetimedb";
 
 // Import all procedure arg schemas
+import * as ConnectLangsmithProcedure from "../connect_langsmith_procedure";
+import * as ConnectSupabaseProcedure from "../connect_supabase_procedure";
+import * as DisconnectConnectorConnectionProcedure from "../disconnect_connector_connection_procedure";
+import * as ListConnectorConnectionsProcedure from "../list_connector_connections_procedure";
+import * as SampleConnectorConnectionProcedure from "../sample_connector_connection_procedure";
+import * as VerifyConnectorConnectionProcedure from "../verify_connector_connection_procedure";
 
+export type ConnectLangsmithArgs = __Infer<typeof ConnectLangsmithProcedure.params>;
+export type ConnectLangsmithResult = __Infer<typeof ConnectLangsmithProcedure.returnType>;
+export type ConnectSupabaseArgs = __Infer<typeof ConnectSupabaseProcedure.params>;
+export type ConnectSupabaseResult = __Infer<typeof ConnectSupabaseProcedure.returnType>;
+export type DisconnectConnectorConnectionArgs = __Infer<typeof DisconnectConnectorConnectionProcedure.params>;
+export type DisconnectConnectorConnectionResult = __Infer<typeof DisconnectConnectorConnectionProcedure.returnType>;
+export type ListConnectorConnectionsArgs = __Infer<typeof ListConnectorConnectionsProcedure.params>;
+export type ListConnectorConnectionsResult = __Infer<typeof ListConnectorConnectionsProcedure.returnType>;
+export type SampleConnectorConnectionArgs = __Infer<typeof SampleConnectorConnectionProcedure.params>;
+export type SampleConnectorConnectionResult = __Infer<typeof SampleConnectorConnectionProcedure.returnType>;
+export type VerifyConnectorConnectionArgs = __Infer<typeof VerifyConnectorConnectionProcedure.params>;
+export type VerifyConnectorConnectionResult = __Infer<typeof VerifyConnectorConnectionProcedure.returnType>;
 

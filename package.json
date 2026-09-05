@@ -12,6 +12,7 @@
     "start": "node server/dist/index.js --production",
     "start:broker": "node server/dist/index.js --production",
     "preview": "vite preview",
+    "test": "tsx --test server/src/connectors/supabase.test.ts server/src/connectors/langsmith.test.ts server/src/connectors/spacetime.test.ts server/src/connectors/browserbase.test.ts",
     "generate": "cargo run -p gen-bindings -- --out-dir src/module_bindings --module-path spacetimedb && prettier --write src/module_bindings",
     "spacetime:generate": "spacetime generate --lang typescript --out-dir src/module_bindings --module-path spacetimedb",
     "spacetime:publish:local": "spacetime publish proactive --module-path spacetimedb --server local",
