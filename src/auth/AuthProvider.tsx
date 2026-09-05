@@ -30,9 +30,18 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 function safeAppPath(value: unknown) {
-  return typeof value === 'string' && value.startsWith('/') && !value.startsWith('//')
-    ? value
-    : '/app/integrations';
+  if (typeof value !== 'string' || !value.startsWith('/')) {
+    return '/app/integrations';
+  }
+
+  try {
+    const resolved = new URL(value, window.location.origin);
+    return resolved.origin === window.location.origin
+      ? `${resolved.pathname}${resolved.search}${resolved.hash}`
+      : '/app/integrations';
+  } catch {
+    return '/app/integrations';
+  }
 }
 
 function AuthBridge({ children }: { children: ReactNode }) {

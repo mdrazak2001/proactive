@@ -1,22 +1,12 @@
 import { useEffect, useState } from 'react';
 import { CheckCircle2, LoaderCircle, TriangleAlert } from 'lucide-react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useAuth } from './AuthProvider';
 import './auth.css';
 
 export default function AuthCallbackPage() {
-  const { configured, error, loading, user } = useAuth();
-  const [searchParams] = useSearchParams();
-  const navigate = useNavigate();
+  const { configured, error, user } = useAuth();
   const [timedOut, setTimedOut] = useState(false);
-  const nextPath = searchParams.get('next');
-  const safeNextPath = nextPath?.startsWith('/') && !nextPath.startsWith('//')
-    ? nextPath
-    : '/app/integrations';
-
-  useEffect(() => {
-    if (!loading && user) navigate(safeNextPath, { replace: true });
-  }, [loading, navigate, safeNextPath, user]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => setTimedOut(true), 8_000);

@@ -5,7 +5,9 @@ import {
   Radio,
   ShieldCheck,
 } from 'lucide-react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useAuth } from '../../auth/AuthProvider';
 import './LandingPage.css';
 
 const signalSources = [
@@ -34,6 +36,81 @@ const investigationSteps = [
   },
 ];
 
+function LandingAuthAction({ placement }: { placement: 'header' | 'hero' }) {
+  const { configured, loading, error, user, signInWithGoogle } = useAuth();
+  const [pending, setPending] = useState(false);
+  const [redirectError, setRedirectError] = useState('');
+  const className = placement === 'header'
+    ? 'landing-header__action'
+    : 'landing-button landing-button--primary';
+
+  if (user) {
+    return (
+      <Link className={className} to="/app/integrations">
+        Open console
+        <ArrowRight aria-hidden="true" size={placement === 'header' ? 15 : 16} strokeWidth={1.8} />
+      </Link>
+    );
+  }
+
+  if (!configured) {
+    return (
+      <button
+        aria-label="Sign-in unavailable because authentication is not configured"
+        className={className}
+        disabled
+        title="Authentication setup is incomplete"
+        type="button"
+      >
+        Auth setup needed
+      </button>
+    );
+  }
+
+  const beginSignIn = async () => {
+    setPending(true);
+    setRedirectError('');
+    try {
+      await signInWithGoogle('/app/integrations');
+    } catch (signInError) {
+      setRedirectError(signInError instanceof Error ? signInError.message : 'Could not open sign in.');
+    } finally {
+      setPending(false);
+    }
+  };
+
+  const actionError = redirectError || error;
+
+  return (
+    <>
+      <button
+        aria-label={placement === 'header'
+          ? 'Sign in with Google'
+          : 'Sign up or sign in with Google'}
+        className={className}
+        disabled={loading || pending}
+        onClick={() => void beginSignIn()}
+        title={actionError || undefined}
+        type="button"
+      >
+        {pending
+          ? 'Opening sign in…'
+          : loading
+            ? 'Checking session…'
+            : actionError
+              ? 'Try sign in'
+              : placement === 'header'
+                ? 'Sign in'
+                : 'Sign up with Google'}
+        <ArrowRight aria-hidden="true" size={placement === 'header' ? 15 : 16} strokeWidth={1.8} />
+      </button>
+      <span aria-live="polite" className="landing-visually-hidden" role="status">
+        {actionError}
+      </span>
+    </>
+  );
+}
+
 export default function LandingPage() {
   return (
     <div className="proactive-landing">
@@ -53,10 +130,7 @@ export default function LandingPage() {
           <a href="#security">Security</a>
         </nav>
 
-        <Link className="landing-header__action" to="/demo/war-room">
-          Open demo
-          <ArrowRight aria-hidden="true" size={15} strokeWidth={1.8} />
-        </Link>
+        <LandingAuthAction placement="header" />
       </header>
 
       <main>
@@ -75,10 +149,7 @@ export default function LandingPage() {
             </p>
 
             <div className="landing-hero__actions">
-              <Link className="landing-button landing-button--primary" to="/app/integrations">
-                Inspect signal sources
-                <ArrowRight aria-hidden="true" size={16} strokeWidth={1.8} />
-              </Link>
+              <LandingAuthAction placement="hero" />
             </div>
 
             <p className="landing-hero__assurance">
