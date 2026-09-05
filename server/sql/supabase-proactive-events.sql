@@ -1,5 +1,7 @@
 -- Isolated demo source for the Supabase connector. Keep production secrets and
--- personal data out of this table; the broker returns a count/timestamp receipt.
+-- personal data out of this table. The Management API path uses the provider's
+-- read-only role; the publishable-key fallback can read only occurred_at through
+-- the anon role and RLS. Neither path should return event content to Proactive.
 create table if not exists public.proactive_events (
   id text primary key,
   service text not null,
@@ -16,12 +18,21 @@ alter table public.proactive_events force row level security;
 
 revoke all on table public.proactive_events from anon, authenticated, public;
 grant select on table public.proactive_events to supabase_read_only_user;
+grant usage on schema public to anon;
+grant select (occurred_at) on table public.proactive_events to anon;
 
 drop policy if exists proactive_events_read_only_select on public.proactive_events;
 create policy proactive_events_read_only_select
   on public.proactive_events
   for select
   to supabase_read_only_user
+  using (true);
+
+drop policy if exists proactive_events_anon_timestamp_select on public.proactive_events;
+create policy proactive_events_anon_timestamp_select
+  on public.proactive_events
+  for select
+  to anon
   using (true);
 
 insert into public.proactive_events (id, service, severity, summary, occurred_at)

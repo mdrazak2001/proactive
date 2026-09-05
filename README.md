@@ -48,7 +48,7 @@ bypass is not honored in production and, in development, requires a loopback
 bind and peer, loopback Host/Origin metadata when present, and no forwarding
 headers. Return the flag to `false` as soon as the smoke test is complete.
 
-For self-service connector testing, sign in, open `/app/integrations`, and use **Connect** for Supabase or LangSmith. Operator-managed Browserbase and Supermemory values still belong in `.env.local`; never prefix a credential with `VITE_` because Vite publishes those values to the browser. A non-sensitive Supabase demo table is in [`server/sql/supabase-proactive-events.sql`](server/sql/supabase-proactive-events.sql).
+For self-service connector testing, sign in, open `/app/integrations`, and use **Connect** for Supabase or LangSmith. Supabase supports two alpha paths: a fine-grained `sbp_fc` token with Database Read, or a `sb_publishable_` key limited by RLS to the supplied demo table's `occurred_at` column. The publishable path is only for sanitized demo data; do not make customer incident tables readable to `anon`. Operator-managed Browserbase and Supermemory values still belong in `.env.local`; never prefix a credential with `VITE_` because Vite publishes those values to the browser. The non-sensitive Supabase table and minimal RLS policy are in [`server/sql/supabase-proactive-events.sql`](server/sql/supabase-proactive-events.sql).
 
 ## Run as one production service
 

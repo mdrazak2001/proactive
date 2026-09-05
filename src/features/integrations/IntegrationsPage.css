@@ -481,6 +481,7 @@
 .connector-form select:focus { border-color: rgba(185, 255, 102, 0.48); box-shadow: 0 0 0 2px rgba(185, 255, 102, 0.08); }
 .connector-form input:disabled,
 .connector-form select:disabled { cursor: wait; opacity: 0.56; }
+.connector-form input:read-only { color: var(--pro-muted); cursor: default; }
 .connector-form__receipt,
 .saved-connection {
   display: flex;
@@ -498,6 +499,12 @@
 .saved-connection > span { display: grid; gap: 3px; color: var(--pro-muted); font-size: 9px; line-height: 1.45; }
 .connector-form__receipt strong,
 .saved-connection strong { color: var(--pro-signal); font-size: 10px; font-weight: 540; }
+.connector-form__receipt--caution {
+  border-color: rgba(239, 184, 95, 0.18);
+  color: var(--pro-amber);
+  background: rgba(239, 184, 95, 0.035);
+}
+.connector-form__receipt--caution strong { color: var(--pro-amber); }
 .saved-connection { margin: 0 0 18px; }
 
 .access-spec { margin: 0; border-top: 1px solid var(--pro-line); }

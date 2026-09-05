@@ -198,6 +198,7 @@ export const onDisconnect = spacetimedb.clientDisconnected(ctx => {
 });
 
 type VaultProvider = 'supabase' | 'langsmith';
+type SupabaseAuthMode = 'publishable_rls' | 'scoped_platform';
 type ConnectorSample = {
   kind: string;
   count: number;
@@ -208,6 +209,9 @@ type ConnectorSample = {
 
 const SUPABASE_PROJECT_REF = /^[a-z0-9]{8,64}$/;
 const SCHEMA_TABLE = /^[a-z_][a-z0-9_]{0,62}\.[a-z_][a-z0-9_]{0,62}$/;
+const SUPABASE_SCOPED_TOKEN = /^sbp_fc[a-zA-Z0-9_-]{8,512}$/;
+const SUPABASE_PUBLISHABLE_KEY = /^sb_publishable_[a-zA-Z0-9_-]{16,256}$/;
+const SUPABASE_PUBLISHABLE_TABLE = 'public.proactive_events';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const LANGSMITH_ENDPOINTS: Record<string, string> = {
   us: 'https://api.smith.langchain.com',
@@ -331,6 +335,20 @@ function quoteSchemaTable(value: string) {
   return `"${schemaName}"."${tableName}"`;
 }
 
+function publicTableName(value: string) {
+  if (!SCHEMA_TABLE.test(value)) {
+    throw new SenderError('Use a schema-qualified Supabase table such as public.proactive_events.');
+  }
+  const [schemaName, tableName] = value.split('.');
+  if (schemaName !== 'public') {
+    throw new SenderError('Supabase publishable-key connections are limited to the public schema.');
+  }
+  if (value !== SUPABASE_PUBLISHABLE_TABLE) {
+    throw new SenderError(`Supabase publishable-key connections are limited to ${SUPABASE_PUBLISHABLE_TABLE}.`);
+  }
+  return tableName;
+}
+
 function readSupabase(
   ctx: ConnectorProcedureCtx,
   accessToken: string,
@@ -338,6 +356,32 @@ function readSupabase(
   sourceTable: string,
   limit: 1 | 5
 ): ConnectorSample {
+  if (SUPABASE_PUBLISHABLE_KEY.test(accessToken)) {
+    const tableName = publicTableName(sourceTable);
+    const raw = providerJson(
+      ctx,
+      'Supabase',
+      `https://${projectRef}.supabase.co/rest/v1/${encodeURIComponent(tableName)}?select=occurred_at&order=occurred_at.desc&limit=${limit}`,
+      {
+        method: 'GET',
+        // The publishable key receives only the deliberately narrow anon/RLS
+        // access configured by server/sql/supabase-proactive-events.sql.
+        headers: { apikey: accessToken },
+      }
+    );
+    const rows = recordsFrom(raw, []).slice(0, limit);
+    if (limit === 1 && rows.length === 0) {
+      throw new SenderError('Supabase reached the demo table but no timestamp row is visible. Run the supplied setup SQL, then retry.');
+    }
+    const latestAt = firstIsoDate(rows, ['occurred_at']);
+    return {
+      kind: limit === 1 ? 'configured-table-access' : 'recent-events',
+      count: rows.length,
+      table: sourceTable,
+      ...(latestAt ? { latestAt } : {}),
+    };
+  }
+
   const projection = '"occurred_at"';
   const ordering = ' order by "occurred_at" desc';
   const raw = providerJson(
@@ -405,23 +449,32 @@ function readLangSmith(
   };
 }
 
-function providerBoundary(provider: VaultProvider) {
-  return provider === 'supabase'
-    ? 'provider read-only database role + fixed table query'
-    : 'workspace service key + fixed project metadata query';
+function providerBoundary(provider: VaultProvider, supabaseMode?: SupabaseAuthMode) {
+  if (provider !== 'supabase') return 'workspace service key + fixed project metadata query';
+  if (supabaseMode === 'publishable_rls') {
+    return 'publishable key + anon RLS + fixed demo timestamp query';
+  }
+  if (supabaseMode === 'scoped_platform') {
+    return 'scoped Database Read token + provider read-only role + fixed table query';
+  }
+  return 'scoped Database Read or publishable-key demo path';
 }
 
-function providerScope(provider: VaultProvider) {
-  return provider === 'supabase'
-    ? ['database:read', 'configured table only', 'maximum 5 rows']
-    : ['projects:read', 'runs:read', 'configured project only', 'maximum 5 rows'];
+function providerScope(provider: VaultProvider, supabaseMode?: SupabaseAuthMode) {
+  if (provider !== 'supabase') {
+    return ['projects:read', 'runs:read', 'configured project only', 'maximum 5 rows'];
+  }
+  return supabaseMode === 'publishable_rls'
+    ? ['public.proactive_events', 'occurred_at only', 'anon RLS', 'maximum 5 rows', 'demo data only']
+    : ['database:read', 'configured table only', 'maximum 5 rows'];
 }
 
 function receipt(
   provider: VaultProvider | 'spacetimedb',
   checkedAt: string,
   sample: ConnectorSample,
-  status = 'verified'
+  status = 'verified',
+  supabaseMode?: SupabaseAuthMode
 ) {
   if (provider === 'spacetimedb') {
     return {
@@ -439,8 +492,8 @@ function receipt(
     provider,
     configured: true,
     status,
-    credentialBoundary: providerBoundary(provider),
-    scope: providerScope(provider),
+    credentialBoundary: providerBoundary(provider, supabaseMode),
+    scope: providerScope(provider, supabaseMode),
     checkedAt,
     message: status === 'verified'
       ? 'Read-only access verified.'
@@ -458,6 +511,15 @@ function missingReceipt(provider: VaultProvider) {
     scope: providerScope(provider),
     message: 'Connect this source to verify a bounded read.',
   };
+}
+
+function supabaseModeFromSettings(settingsJson: string): SupabaseAuthMode | undefined {
+  try {
+    const value = (JSON.parse(settingsJson) as Record<string, unknown>).authMode;
+    return value === 'publishable_rls' || value === 'scoped_platform' ? value : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function readSavedConnector(ctx: ConnectorProcedureCtx, provider: VaultProvider) {
@@ -551,7 +613,13 @@ export const listConnectorConnections = spacetimedb.procedure(
       } catch {
         // A safe placeholder is enough; verification can rewrite the receipt.
       }
-      return receipt(provider, row.checked_at.toISOString(), sample, row.status);
+      return receipt(
+        provider,
+        row.checked_at.toISOString(),
+        sample,
+        row.status,
+        provider === 'supabase' ? supabaseModeFromSettings(row.settings_json) : undefined
+      );
     };
     const roomCount = ctx.withTx(tx => [...tx.db.incident_room.iter()].length);
     return JSON.stringify({
@@ -576,8 +644,10 @@ export const connectSupabase = spacetimedb.procedure(
     const token = assertCredential(accessToken, 'Supabase');
     const project = projectRef.trim();
     const tableName = sourceTable.trim().toLowerCase();
-    if (!token.startsWith('sbp_fc')) {
-      throw new SenderError('Use a scoped Supabase token beginning sbp_fc with Database Read on this project. Classic PATs and project keys are not accepted.');
+    const isScopedToken = SUPABASE_SCOPED_TOKEN.test(token);
+    const isPublishableKey = SUPABASE_PUBLISHABLE_KEY.test(token);
+    if (!isScopedToken && !isPublishableKey) {
+      throw new SenderError('Use a scoped Supabase token beginning sbp_fc or a publishable key beginning sb_publishable_. Classic PATs, anon JWTs, secret keys, and service-role keys are not accepted.');
     }
     if (!SUPABASE_PROJECT_REF.test(project)) {
       throw new SenderError('Supabase project ref is not valid.');
@@ -585,16 +655,18 @@ export const connectSupabase = spacetimedb.procedure(
     if (!SCHEMA_TABLE.test(tableName)) {
       throw new SenderError('Use a schema-qualified table such as public.proactive_events.');
     }
+    if (isPublishableKey) publicTableName(tableName);
+    const authMode: SupabaseAuthMode = isPublishableKey ? 'publishable_rls' : 'scoped_platform';
     takeConnectorRequestSlot(ctx, 'supabase');
     const sample = readSupabase(ctx, token, project, tableName, 1);
     saveConnector(
       ctx,
       'supabase',
       JSON.stringify({ accessToken: token }),
-      JSON.stringify({ projectRef: project, sourceTable: tableName }),
+      JSON.stringify({ projectRef: project, sourceTable: tableName, authMode }),
       sample
     );
-    return JSON.stringify(receipt('supabase', ctx.timestamp.toISOString(), sample));
+    return JSON.stringify(receipt('supabase', ctx.timestamp.toISOString(), sample, 'verified', authMode));
   }
 );
 
@@ -643,11 +715,14 @@ export const verifyConnectorConnection = spacetimedb.procedure(
       throw new SenderError('That connector is not available for self-service setup.');
     }
     const provider = rawProvider as VaultProvider;
+    const supabaseMode = provider === 'supabase'
+      ? supabaseModeFromSettings(readSavedConnector(ctx, provider)?.settings_json ?? '')
+      : undefined;
     try {
       takeConnectorRequestSlot(ctx, provider);
       const sample = runSavedConnector(ctx, provider, 1);
       markConnector(ctx, provider, 'verified', sample);
-      return JSON.stringify(receipt(provider, ctx.timestamp.toISOString(), sample));
+      return JSON.stringify(receipt(provider, ctx.timestamp.toISOString(), sample, 'verified', supabaseMode));
     } catch (error) {
       markConnector(ctx, provider, 'error');
       throw error;
@@ -671,11 +746,14 @@ export const sampleConnectorConnection = spacetimedb.procedure(
       throw new SenderError('That connector is not available for self-service setup.');
     }
     const provider = rawProvider as VaultProvider;
+    const supabaseMode = provider === 'supabase'
+      ? supabaseModeFromSettings(readSavedConnector(ctx, provider)?.settings_json ?? '')
+      : undefined;
     try {
       takeConnectorRequestSlot(ctx, provider);
       const sample = runSavedConnector(ctx, provider, 5);
       markConnector(ctx, provider, 'verified', sample);
-      return JSON.stringify(receipt(provider, ctx.timestamp.toISOString(), sample));
+      return JSON.stringify(receipt(provider, ctx.timestamp.toISOString(), sample, 'verified', supabaseMode));
     } catch (error) {
       markConnector(ctx, provider, 'error');
       throw error;

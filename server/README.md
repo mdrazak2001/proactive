@@ -92,13 +92,16 @@ remain required before a customer beta.
 
 ### Supabase
 
-Use a fine-grained Management API token with Project Settings Read and Database
-Read, plus a schema-qualified source table. The query runs through Supabase's
-`/database/query/read-only` endpoint as `supabase_read_only_user`; it never uses
-an `sb_secret` or `service_role` key. `server/sql/supabase-proactive-events.sql`
-creates a non-sensitive demo table. Verification performs a one-row constant
-projection from that exact table. Sampling reads only five `occurred_at` values
-to calculate a count and latest timestamp.
+Use either a fine-grained Management API token with Database Read or, for the
+demo-only path, the project's `sb_publishable_` key plus a schema-qualified
+source table. Fine-grained tokens run through Supabase's
+`/database/query/read-only` endpoint as `supabase_read_only_user`. Publishable
+keys run through the Data API and are restricted to the `public` schema; the
+supplied RLS policy grants `anon` column-level SELECT on `occurred_at` only.
+Neither path accepts an `sb_secret`, `service_role`, anon JWT, or classic PAT.
+`server/sql/supabase-proactive-events.sql` creates the non-sensitive demo table
+and minimal policy. Verification reads one `occurred_at` value and sampling
+reads at most five. Never use publishable mode for customer incident data.
 
 ### LangSmith
 

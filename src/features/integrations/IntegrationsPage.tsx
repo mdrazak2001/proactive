@@ -196,6 +196,7 @@ function ConnectorSetupForm({
   onConnect: (input: ConnectorSetup) => void;
 }) {
   const [accessToken, setAccessToken] = useState('');
+  const [supabaseMode, setSupabaseMode] = useState<'publishable' | 'scoped'>('publishable');
   const [projectRef, setProjectRef] = useState('');
   const [sourceTable, setSourceTable] = useState('public.proactive_events');
   const [apiKey, setApiKey] = useState('');
@@ -226,19 +227,38 @@ function ConnectorSetupForm({
       {provider.id === 'supabase' ? (
         <>
           <label>
-            <span>Platform access token</span>
+            <span>Connection method</span>
+            <select
+              value={supabaseMode}
+              onChange={event => {
+                setSupabaseMode(event.target.value as 'publishable' | 'scoped');
+                setAccessToken('');
+              }}
+              disabled={disabled}
+            >
+              <option value="publishable">Publishable key + RLS demo table</option>
+              <option value="scoped">Fine-grained token (sbp_fc)</option>
+            </select>
+            <small>Publishable mode works on every Supabase account. Scoped tokens are still in public alpha.</small>
+          </label>
+          <label>
+            <span>{supabaseMode === 'publishable' ? 'Project publishable key' : 'Scoped platform token'}</span>
             <input
               type="password"
               value={accessToken}
               onChange={event => setAccessToken(event.target.value)}
-              placeholder="sbp_fc…"
+              placeholder={supabaseMode === 'publishable' ? 'sb_publishable_…' : 'sbp_fc…'}
               autoComplete="new-password"
               required
               minLength={8}
               maxLength={4096}
               disabled={disabled}
             />
-            <small>Use a scoped token limited to this project with Database Read. Classic PATs and project keys are rejected.</small>
+            <small>
+              {supabaseMode === 'publishable'
+                ? 'Use the public client key from Project Settings → API Keys. Secret, service-role, anon JWT, and classic PAT values are rejected.'
+                : 'Use a fine-grained token limited to this project with Database Read. Classic PATs are rejected.'}
+            </small>
           </label>
           <label>
             <span>Project ref</span>
@@ -252,17 +272,28 @@ function ConnectorSetupForm({
             />
           </label>
           <label>
-            <span>Curated source table</span>
+            <span>Read-only table (schema.table)</span>
             <input
               value={sourceTable}
               onChange={event => setSourceTable(event.target.value.toLowerCase())}
               placeholder="public.proactive_events"
               pattern="[a-z_][a-z0-9_]{0,62}\.[a-z_][a-z0-9_]{0,62}"
+              readOnly={supabaseMode === 'publishable'}
               required
               disabled={disabled}
             />
-            <small>Verification reads one timestamp; samples return at most five timestamps.</small>
+            <small>
+              {supabaseMode === 'publishable'
+                ? 'Demo mode accepts only the public schema. Its occurred_at column must be intentionally readable by the anon role through RLS.'
+                : 'Verification reads one occurred_at timestamp; samples return at most five timestamps.'}
+            </small>
           </label>
+          {supabaseMode === 'publishable' && (
+            <div className="connector-form__receipt connector-form__receipt--caution">
+              <ShieldCheck size={16} aria-hidden="true" />
+              <span><strong>Demo-safe boundary</strong>The publishable key is not a secret. Only use this path with the supplied sanitized table policy—never expose a customer incident table to anon.</span>
+            </div>
+          )}
         </>
       ) : (
         <>
@@ -315,7 +346,7 @@ function ConnectorSetupForm({
 
       <div className="connector-form__receipt">
         <ShieldCheck size={16} aria-hidden="true" />
-        <span><strong>Read-only execution</strong>Fixed provider host · fixed query shape · 1-row verification · 5-row sample</span>
+        <span><strong>Read-only execution</strong>Fixed provider host · fixed query shape · timestamp only · 1-row verification · 5-row sample</span>
       </div>
     </form>
   );
