@@ -8,6 +8,7 @@ import {
 } from 'react-router-dom';
 import LandingPage from './features/marketing/LandingPage';
 import IntegrationsPage from './features/integrations/IntegrationsPage';
+import ObservabilityDemoPage from './features/observability/ObservabilityDemoPage';
 import LegalPage from './features/legal/LegalPage';
 import ProductShell from './layouts/ProductShell';
 import { AuthProvider } from './auth/AuthProvider';
@@ -56,6 +57,7 @@ export default function RouterApp() {
           <Route path="/privacy" element={<LegalPage document="privacy" />} />
           <Route path="/terms" element={<LegalPage document="terms" />} />
           <Route path="/auth/callback" element={<AuthCallbackPage />} />
+          <Route path="/demo/observability" element={<ObservabilityDemoPage />} />
           <Route path="/app" element={<ProductShell />}>
             <Route index element={<Navigate to="integrations" replace />} />
             <Route

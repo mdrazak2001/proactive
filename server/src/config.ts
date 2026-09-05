@@ -41,6 +41,14 @@ export interface BrokerConfig {
     projectId?: string;
     baseUrl: string;
   };
+  computer: {
+    openAiApiKey?: string;
+    model: string;
+    startUrl: string;
+    allowedOrigins: readonly string[];
+    maxSteps: number;
+    timeoutMs: number;
+  };
 }
 
 function optional(env: NodeJS.ProcessEnv, name: string): string | undefined {
@@ -184,6 +192,29 @@ export function loadConfig(
       projectId: optional(env, 'BROWSERBASE_PROJECT_ID'),
       baseUrl: withoutTrailingSlash(
         optional(env, 'BROWSERBASE_BASE_URL') ?? 'https://api.browserbase.com',
+      ),
+    },
+    computer: {
+      openAiApiKey: optional(env, 'OPENAI_API_KEY'),
+      model: optional(env, 'OPENAI_COMPUTER_MODEL') ?? 'gpt-5.4-mini',
+      startUrl:
+        optional(env, 'OPENAI_COMPUTER_START_URL') ??
+        'https://proactive-six.vercel.app/demo/observability',
+      allowedOrigins: commaSeparated(
+        optional(env, 'OPENAI_COMPUTER_ALLOWED_ORIGINS') ??
+          'https://proactive-six.vercel.app',
+      ),
+      maxSteps: integerInRange(
+        optional(env, 'OPENAI_COMPUTER_MAX_STEPS'),
+        10,
+        1,
+        20,
+      ),
+      timeoutMs: integerInRange(
+        optional(env, 'OPENAI_COMPUTER_TIMEOUT_MS'),
+        180_000,
+        10_000,
+        240_000,
       ),
     },
   };

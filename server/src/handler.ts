@@ -5,6 +5,7 @@ import { extname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
 import { createAuthorizer, parseBearer } from './auth.js';
+import { runBrowserComputer, type ComputerRunEvent } from './computer/runtime.js';
 import { loadConfig } from './config.js';
 import { connectorCallContext } from './connectors/call-context.js';
 import {
@@ -172,7 +173,7 @@ async function serveFrontend(
   await pipeline(createReadStream(filePath), response);
 }
 
-async function acceptEmptyJsonBody(request: IncomingMessage): Promise<void> {
+async function readJsonObject(request: IncomingMessage): Promise<Record<string, unknown>> {
   const declaredLength = Number.parseInt(request.headers['content-length'] ?? '0', 10);
   if (Number.isFinite(declaredLength) && declaredLength > config.requestBodyLimitBytes) {
     request.resume();
@@ -190,7 +191,7 @@ async function acceptEmptyJsonBody(request: IncomingMessage): Promise<void> {
     chunks.push(chunk);
   }
 
-  if (byteLength === 0) return;
+  if (byteLength === 0) return {};
   const contentType = request.headers['content-type']?.split(';', 1)[0]?.trim().toLowerCase();
   if (contentType !== 'application/json') {
     throw new PublicError(415, 'unsupported_media_type', 'POST requests accept JSON only.');
@@ -202,17 +203,104 @@ async function acceptEmptyJsonBody(request: IncomingMessage): Promise<void> {
   } catch {
     throw new PublicError(400, 'invalid_json', 'The request body is not valid JSON.');
   }
-  if (
-    typeof parsed !== 'object' ||
-    parsed === null ||
-    Array.isArray(parsed) ||
-    Object.keys(parsed).length > 0
-  ) {
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    throw new PublicError(
+      400,
+      'unsupported_input',
+      'This endpoint accepts a JSON object only.',
+    );
+  }
+  return parsed as Record<string, unknown>;
+}
+
+async function acceptEmptyJsonBody(request: IncomingMessage): Promise<void> {
+  const body = await readJsonObject(request);
+  if (Object.keys(body).length > 0) {
     throw new PublicError(
       400,
       'unsupported_input',
       'This endpoint runs a fixed read-only check and accepts only an empty object.',
     );
+  }
+}
+
+function computerGoal(body: Record<string, unknown>): string {
+  if (Object.keys(body).some((key) => key !== 'goal')) {
+    throw new PublicError(
+      400,
+      'unsupported_input',
+      'The computer endpoint accepts only a goal.',
+    );
+  }
+  const goal = typeof body.goal === 'string' ? body.goal.trim() : '';
+  if (!goal || goal.length > 1_200) {
+    throw new PublicError(
+      400,
+      'computer_goal_invalid',
+      'Provide a computer goal between 1 and 1,200 characters.',
+    );
+  }
+  return goal;
+}
+
+function writeServerEvent(
+  response: ServerResponse,
+  event: ComputerRunEvent['type'] | 'error',
+  value: unknown,
+): void {
+  if (response.writableEnded || response.destroyed) return;
+  response.write(`event: ${event}\ndata: ${JSON.stringify(value)}\n\n`);
+}
+
+async function streamComputerRun(
+  request: IncomingMessage,
+  response: ServerResponse,
+  goal: string,
+): Promise<void> {
+  response.writeHead(200, {
+    ...securityHeaders(),
+    'cache-control': 'no-store, no-cache, must-revalidate',
+    connection: 'keep-alive',
+    'content-type': 'text/event-stream; charset=utf-8',
+    'x-accel-buffering': 'no',
+  });
+  response.flushHeaders();
+  response.write(': proactive computer stream\n\n');
+  const heartbeat = setInterval(() => {
+    if (!response.writableEnded && !response.destroyed) {
+      response.write(': heartbeat\n\n');
+    }
+  }, 15_000);
+
+  const abortController = new AbortController();
+  const abortRun = () => {
+    if (!abortController.signal.aborted) abortController.abort();
+  };
+  request.once('aborted', abortRun);
+  request.once('error', abortRun);
+  response.once('close', abortRun);
+
+  try {
+    await runBrowserComputer({
+      config,
+      goal,
+      signal: abortController.signal,
+      emit: (event) => writeServerEvent(response, event.type, event),
+    });
+  } catch (error) {
+    const publicError = asPublicError(error);
+    if (publicError.code !== 'computer_confirmation_required') {
+      writeServerEvent(response, 'error', {
+        code: publicError.code,
+        message: publicError.message,
+      });
+    }
+  } finally {
+    clearInterval(heartbeat);
+    request.removeListener('aborted', abortRun);
+    request.removeListener('error', abortRun);
+    response.removeListener('close', abortRun);
+    if (!response.writableEnded) response.end();
   }
 }
 
@@ -340,6 +428,16 @@ async function dispatchBrokerRequest(
     return;
   }
 
+  if (url.pathname === '/api/computer/run') {
+    if (method !== 'POST') {
+      throw new PublicError(405, 'method_not_allowed', 'This route accepts POST only.');
+    }
+    const principal = await authorizer.authorize(request);
+    const goal = computerGoal(await readJsonObject(request));
+    await principalLimiter.run(principal, () => streamComputerRun(request, response, goal));
+    return;
+  }
+
   const operationMatch = /^\/api\/integrations\/([a-z0-9]+)\/(verify|query)$/.exec(
     url.pathname,
   );
@@ -410,6 +508,7 @@ export async function handleBrokerRequest(
 function routeLabel(rawUrl: string | undefined): string {
   const path = rawUrl?.split('?', 1)[0];
   if (path === '/api/integrations/status') return 'integration-status';
+  if (path === '/api/computer/run') return 'computer-run';
   if (/^\/api\/integrations\/[a-z0-9]+\/(verify|query)$/.test(path ?? '')) {
     return 'integration-operation';
   }

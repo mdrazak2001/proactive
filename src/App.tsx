@@ -2,10 +2,18 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { reducers, tables } from './module_bindings';
 import { useReducer, useSpacetimeDB, useTable } from 'spacetimedb/react';
 import LiveViewPane from './features/war-room/LiveViewPane';
-import { useBrowserbaseLiveView } from './features/war-room/useBrowserbaseLiveView';
+import {
+  useBrowserbaseLiveView,
+  type ComputerRunState,
+} from './features/war-room/useBrowserbaseLiveView';
 import './App.css';
 
 const ROOM_ID = 'checkout-r42';
+const COMPUTER_DEMO_GOAL = [
+  'Investigate whether release R42 caused the checkout error spike in this read-only demo.',
+  'Select checkout-api, change the window to 30 minutes, show deploy markers, inspect the applyCoupon TypeError, and check Stripe dependency health.',
+  'Do not roll back, remediate, submit, or change production. Finish with the evidence you observed.',
+].join(' ');
 
 const transcriptScript = [
   {
@@ -159,17 +167,35 @@ function TelemetryChart({ stepCount }: { stepCount: number }) {
   );
 }
 
-function AgentComputer({ request, steps, evidenceRows, conclusionRow, liveViewUrl }: {
+function AgentComputer({ request, steps, evidenceRows, conclusionRow, computerRun }: {
   request: any;
   steps: readonly any[];
   evidenceRows: readonly any[];
   conclusionRow: any;
-  liveViewUrl?: string;
+  computerRun: ComputerRunState;
 }) {
   const running = request?.status === 'running';
   const waiting = request && ['proposed', 'edited', 'approved'].includes(request.status);
   const latestStep = steps.length > 0 ? steps[steps.length - 1] : undefined;
-  const showLiveView = Boolean(liveViewUrl) && (running || request?.status === 'ready_to_review');
+  const showLiveView = Boolean(computerRun.liveViewUrl) && (running || request?.status === 'ready_to_review');
+  const computerFailed = computerRun.status === 'error' || computerRun.status === 'approval_required';
+  const computerActive = computerRun.status === 'starting' || computerRun.status === 'running';
+  const receiptLabel = computerFailed
+    ? 'COMPUTER PAUSED'
+    : computerRun.status === 'completed'
+      ? 'COMPUTER RUN COMPLETE'
+      : computerActive
+        ? `LIVE COMPUTER · ${computerRun.actionCount} ACTION${computerRun.actionCount === 1 ? '' : 'S'}`
+        : conclusionRow
+          ? 'CONCLUSION READY'
+          : running
+            ? `STEP ${steps.length + 1} OF 4`
+            : 'AGENT STATUS';
+  const receiptText = computerRun.error
+    ?? computerRun.summary
+    ?? conclusionRow?.summary
+    ?? latestStep?.label
+    ?? (waiting ? 'Waiting for approval' : 'Standing by');
 
   return (
     <section className="agent-panel">
@@ -196,8 +222,8 @@ function AgentComputer({ request, steps, evidenceRows, conclusionRow, liveViewUr
             <strong>Waiting for a diagnostic question</strong>
             <p>The agent can inspect the seeded observability console after approval.</p>
           </div>
-        ) : showLiveView && liveViewUrl ? (
-          <LiveViewPane url={liveViewUrl} />
+        ) : showLiveView && computerRun.liveViewUrl ? (
+          <LiveViewPane url={computerRun.liveViewUrl} />
         ) : (
           <div className="observability-console">
             <div className="console-toolbar">
@@ -237,13 +263,13 @@ function AgentComputer({ request, steps, evidenceRows, conclusionRow, liveViewUr
 
       <div className="execution-receipt" aria-live="polite">
         <div className="execution-receipt__lead">
-          <StatusGlyph status={conclusionRow ? 'ready' : running ? 'running' : 'idle'} />
+          <StatusGlyph status={computerFailed ? 'paused' : conclusionRow ? 'ready' : running ? 'running' : 'idle'} />
           <div>
-            <span>{conclusionRow ? 'CONCLUSION READY' : running ? `STEP ${steps.length + 1} OF 4` : 'AGENT STATUS'}</span>
-            <strong>{conclusionRow?.summary ?? latestStep?.label ?? (waiting ? 'Waiting for approval' : 'Standing by')}</strong>
+            <span>{receiptLabel}</span>
+            <strong>{receiptText}</strong>
           </div>
         </div>
-        {running && <div className="running-bars"><i /><i /><i /><i /><i /></div>}
+        {(running || computerActive) && <div className="running-bars"><i /><i /><i /><i /><i /></div>}
       </div>
 
       {(evidenceRows.length > 0 || conclusionRow) && (
@@ -370,6 +396,7 @@ function App() {
 
   const roomRequested = useRef(false);
   const executionStarted = useRef<bigint | null>(null);
+  const completionSubmitted = useRef<bigint | null>(null);
   const room = rooms.find(item => item.roomId === ROOM_ID);
   const roomParticipants = participants.filter(item => item.roomId === ROOM_ID && item.online);
   const roomSegments = useMemo(
@@ -394,12 +421,16 @@ function App() {
     () => events.filter(item => item.roomId === ROOM_ID).sort((a, b) => compareBigInt(b.id, a.id)).slice(0, 8),
     [events]
   );
-  const liveViewUrl = useBrowserbaseLiveView(request?.status === 'running' || request?.status === 'ready_to_review');
   const isCommander = role === 'Incident commander';
   const executionSurface = useMemo(() => {
     const forcedControl = new URLSearchParams(window.location.search).get('role') === 'control';
     return !forcedControl && !window.matchMedia('(max-width: 720px)').matches;
   }, []);
+  const computerRun = useBrowserbaseLiveView(
+    joined && executionSurface && isCommander && request?.status === 'running',
+    COMPUTER_DEMO_GOAL,
+    request ? String(request.id) : '',
+  );
 
   useEffect(() => {
     if (!connected || room || roomRequested.current) return;
@@ -409,7 +440,7 @@ function App() {
   }, [connected, createDemoRoom, room]);
 
   useEffect(() => {
-    if (!executionSurface || request?.status !== 'running' || requestSteps.length > 0) return;
+    if (!joined || !executionSurface || !isCommander || request?.status !== 'running' || requestSteps.length > 0) return;
     if (executionStarted.current === request.id) return;
     executionStarted.current = request.id;
 
@@ -453,20 +484,64 @@ function App() {
         }
         await wait(1050);
       }
-      await complete({
-        requestId: request.id,
-        summary: 'R42 is the likely source of the checkout regression.',
-        confidence: 'HIGH CONFIDENCE',
-        recommendation: 'Review rollback of R42. No production action has been taken.',
-      });
     };
 
     run().catch(reason => setError(String(reason)));
   }, [
     addEvidence,
-    complete,
     executionSurface,
+    isCommander,
+    joined,
     recordStep,
+    request,
+    requestSteps.length,
+  ]);
+
+  useEffect(() => {
+    if (
+      !joined ||
+      !executionSurface ||
+      !isCommander ||
+      !request ||
+      request.status !== 'running' ||
+      requestSteps.length < agentRecipe.length ||
+      completionSubmitted.current === request.id
+    ) {
+      return;
+    }
+
+    if (computerRun.status === 'completed') {
+      completionSubmitted.current = request.id;
+      const observedSummary = computerRun.summary?.trim();
+      void complete({
+        requestId: request.id,
+        summary: observedSummary
+          ? observedSummary.slice(0, 500)
+          : 'The live computer verified the R42 correlation and a healthy Stripe baseline.',
+        confidence: 'COMPUTER VERIFIED',
+        recommendation: 'Review rollback of R42. No production action has been taken.',
+      }).catch(reason => {
+        completionSubmitted.current = null;
+        setError(String(reason));
+      });
+      return;
+    }
+
+    if (computerRun.status === 'error' || computerRun.status === 'approval_required') {
+      completionSubmitted.current = request.id;
+      void pause({ requestId: request.id }).catch(reason => {
+        completionSubmitted.current = null;
+        setError(String(reason));
+      });
+    }
+  }, [
+    complete,
+    computerRun.status,
+    computerRun.summary,
+    executionSurface,
+    isCommander,
+    joined,
+    pause,
     request,
     requestSteps.length,
   ]);
@@ -522,6 +597,7 @@ function App() {
     try {
       await resetDemo({ roomId: ROOM_ID });
       executionStarted.current = null;
+      completionSubmitted.current = null;
     } catch (reason) {
       setError(String(reason));
     }
@@ -592,7 +668,7 @@ function App() {
           </div>
         </aside>
 
-        <AgentComputer request={request} steps={requestSteps} evidenceRows={requestEvidence} conclusionRow={conclusionRow} liveViewUrl={liveViewUrl} />
+        <AgentComputer request={request} steps={requestSteps} evidenceRows={requestEvidence} conclusionRow={conclusionRow} computerRun={computerRun} />
 
         <aside className="rail-panel">
           <InvestigationOrder
