@@ -115,9 +115,6 @@ export default function ProductShell() {
           <Link to="/">Product</Link>
           <span>Connector console</span>
           <AuthControl />
-          <Link className="product-topbar__demo" to="/demo/war-room">
-            Open live demo <span aria-hidden="true">↗</span>
-          </Link>
         </header>
         <main className="product-content">
           <Outlet />

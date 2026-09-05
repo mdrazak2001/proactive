@@ -75,12 +75,9 @@ export default function LandingPage() {
             </p>
 
             <div className="landing-hero__actions">
-              <Link className="landing-button landing-button--primary" to="/demo/war-room">
-                Open live demo
-                <ArrowRight aria-hidden="true" size={16} strokeWidth={1.8} />
-              </Link>
-              <Link className="landing-button landing-button--secondary" to="/app/integrations">
+              <Link className="landing-button landing-button--primary" to="/app/integrations">
                 Inspect signal sources
+                <ArrowRight aria-hidden="true" size={16} strokeWidth={1.8} />
               </Link>
             </div>
 
