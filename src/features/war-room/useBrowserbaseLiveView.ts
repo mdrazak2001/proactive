@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../../auth/AuthProvider';
 import { runComputer, type ComputerStreamEvent } from './computerApi';
 
@@ -11,6 +11,7 @@ export interface ComputerRunState {
 }
 
 const idleState: ComputerRunState = { status: 'idle', actionCount: 0 };
+const RUN_MARKER_TTL_MS = 5 * 60 * 1_000;
 
 function runMarker(runKey: string): string {
   return `proactive_computer_started:${runKey}`;
@@ -18,7 +19,14 @@ function runMarker(runKey: string): string {
 
 function hasStarted(runKey: string): boolean {
   try {
-    return localStorage.getItem(runMarker(runKey)) === 'true';
+    const marker = runMarker(runKey);
+    const startedAt = Number(localStorage.getItem(marker));
+    const expired = Date.now() - startedAt > RUN_MARKER_TTL_MS;
+    if (!Number.isFinite(startedAt) || startedAt <= 0 || expired) {
+      localStorage.removeItem(marker);
+      return false;
+    }
+    return true;
   } catch {
     return false;
   }
@@ -26,7 +34,7 @@ function hasStarted(runKey: string): boolean {
 
 function markStarted(runKey: string): void {
   try {
-    localStorage.setItem(runMarker(runKey), 'true');
+    localStorage.setItem(runMarker(runKey), String(Date.now()));
   } catch {
     // The authenticated broker still applies concurrency and rate limits.
   }
@@ -59,13 +67,39 @@ export function useBrowserbaseLiveView(
 ): ComputerRunState {
   const { idToken } = useAuth();
   const [state, setState] = useState<ComputerRunState>(idleState);
+  const [markerRevision, setMarkerRevision] = useState(0);
+  const stateRunKey = useRef('');
 
   useEffect(() => {
-    if (!active) {
+    if (stateRunKey.current !== runKey) {
+      stateRunKey.current = runKey;
       setState(idleState);
+    }
+    if (!active) {
+      setState((current) =>
+        current.status === 'starting' || current.status === 'running' ? idleState : current,
+      );
       return;
     }
-    if (!idToken || !runKey || hasStarted(runKey)) return;
+    if (!idToken || !runKey) return;
+    if (hasStarted(runKey)) {
+      const startedAt = Number(localStorage.getItem(runMarker(runKey)));
+      const remaining = Math.max(0, RUN_MARKER_TTL_MS - (Date.now() - startedAt));
+      const retry = window.setTimeout(
+        () => setMarkerRevision((revision) => revision + 1),
+        remaining + 50,
+      );
+      const retryWhenReleased = (event: StorageEvent) => {
+        if (event.key === runMarker(runKey) && event.newValue === null) {
+          setMarkerRevision((revision) => revision + 1);
+        }
+      };
+      window.addEventListener('storage', retryWhenReleased);
+      return () => {
+        window.clearTimeout(retry);
+        window.removeEventListener('storage', retryWhenReleased);
+      };
+    }
 
     const controller = new AbortController();
     let began = false;
@@ -141,7 +175,7 @@ export function useBrowserbaseLiveView(
       controller.abort();
       if (began && !completed) clearStarted(runKey);
     };
-  }, [active, goal, idToken, runKey]);
+  }, [active, goal, idToken, markerRevision, runKey]);
 
   return state;
 }

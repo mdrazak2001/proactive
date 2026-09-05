@@ -48,16 +48,34 @@ const agentRecipe = [
     label: 'Overlay release markers',
     detail: 'Release R42 deployed at 14:14:08',
     screenshotRef: 'deploy',
+    evidence: {
+      kind: 'DEPLOY CORRELATION',
+      headline: 'Errors rose 2m after R42',
+      detail: 'Checkout 5xx moved from 0.8% to 12.6% immediately after release.',
+      value: '+11.8%',
+    },
   },
   {
     label: 'Open new error group',
     detail: 'TypeError in applyCoupon first seen after R42',
     screenshotRef: 'error',
+    evidence: {
+      kind: 'NEW EXCEPTION',
+      headline: 'applyCoupon TypeError',
+      detail: 'First seen in R42; isolated to coupon-enabled checkout requests.',
+      value: 'R42 only',
+    },
   },
   {
     label: 'Compare Stripe dependency',
     detail: 'Stripe p95 and error rate remained inside baseline',
     screenshotRef: 'dependency',
+    evidence: {
+      kind: 'DEPENDENCY CHECK',
+      headline: 'Stripe remained healthy',
+      detail: 'Latency and error rate stayed within the previous 24-hour baseline.',
+      value: '342ms p95',
+    },
   },
 ];
 
@@ -397,6 +415,8 @@ function App() {
   const roomRequested = useRef(false);
   const executionStarted = useRef<bigint | null>(null);
   const completionSubmitted = useRef<bigint | null>(null);
+  const pauseRequestedFor = useRef<bigint | null>(null);
+  const [recipeFinishedFor, setRecipeFinishedFor] = useState<bigint | null>(null);
   const room = rooms.find(item => item.roomId === ROOM_ID);
   const roomParticipants = participants.filter(item => item.roomId === ROOM_ID && item.online);
   const roomSegments = useMemo(
@@ -431,6 +451,9 @@ function App() {
     COMPUTER_DEMO_GOAL,
     request ? String(request.id) : '',
   );
+  const computerVerified = computerRun.status === 'completed';
+  const computerFailed =
+    computerRun.status === 'error' || computerRun.status === 'approval_required';
 
   useEffect(() => {
     if (!connected || room || roomRequested.current) return;
@@ -440,61 +463,73 @@ function App() {
   }, [connected, createDemoRoom, room]);
 
   useEffect(() => {
-    if (!joined || !executionSurface || !isCommander || request?.status !== 'running' || requestSteps.length > 0) return;
+    if (
+      !joined ||
+      !executionSurface ||
+      !isCommander ||
+      request?.status !== 'running' ||
+      !computerVerified
+    ) return;
     if (executionStarted.current === request.id) return;
-    executionStarted.current = request.id;
+    const requestId = request.id;
+    executionStarted.current = requestId;
+    setRecipeFinishedFor(null);
+    let cancelled = false;
 
     const run = async () => {
+      const recordedSequences = new Set(requestSteps.map(step => step.sequence));
+      const recordedEvidenceKinds = new Set(requestEvidence.map(row => row.kind));
       for (let index = 0; index < agentRecipe.length; index += 1) {
+        if (cancelled) return;
         const step = agentRecipe[index];
-        await recordStep({
-          requestId: request.id,
-          sequence: index + 1,
-          label: step.label,
-          detail: step.detail,
-          status: 'complete',
-          screenshotRef: step.screenshotRef,
-        });
-        if (index === 1) {
-          await addEvidence({
-            requestId: request.id,
-            kind: 'DEPLOY CORRELATION',
-            headline: 'Errors rose 2m after R42',
-            detail: 'Checkout 5xx moved from 0.8% to 12.6% immediately after release.',
-            value: '+11.8%',
-          });
+        let changed = false;
+        if (step.evidence && !recordedEvidenceKinds.has(step.evidence.kind)) {
+          await addEvidence({ requestId, ...step.evidence });
+          if (cancelled) return;
+          recordedEvidenceKinds.add(step.evidence.kind);
+          changed = true;
         }
-        if (index === 2) {
-          await addEvidence({
-            requestId: request.id,
-            kind: 'NEW EXCEPTION',
-            headline: 'applyCoupon TypeError',
-            detail: 'First seen in R42; isolated to coupon-enabled checkout requests.',
-            value: 'R42 only',
+        const sequence = index + 1;
+        if (!recordedSequences.has(sequence)) {
+          await recordStep({
+            requestId,
+            sequence,
+            label: step.label,
+            detail: step.detail,
+            status: 'complete',
+            screenshotRef: step.screenshotRef,
           });
+          if (cancelled) return;
+          recordedSequences.add(sequence);
+          changed = true;
         }
-        if (index === 3) {
-          await addEvidence({
-            requestId: request.id,
-            kind: 'DEPENDENCY CHECK',
-            headline: 'Stripe remained healthy',
-            detail: 'Latency and error rate stayed within the previous 24-hour baseline.',
-            value: '342ms p95',
-          });
-        }
-        await wait(1050);
+        if (changed) await wait(420);
       }
+      if (!cancelled) setRecipeFinishedFor(requestId);
     };
 
-    run().catch(reason => setError(String(reason)));
+    run().catch(reason => {
+      if (cancelled) return;
+      setError(String(reason));
+      completionSubmitted.current = requestId;
+      void pause({ requestId }).catch(pauseReason => {
+        completionSubmitted.current = null;
+        setError(String(pauseReason));
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [
     addEvidence,
+    computerVerified,
     executionSurface,
     isCommander,
     joined,
+    pause,
     recordStep,
-    request,
-    requestSteps.length,
+    request?.id,
+    request?.status,
   ]);
 
   useEffect(() => {
@@ -504,13 +539,22 @@ function App() {
       !isCommander ||
       !request ||
       request.status !== 'running' ||
-      requestSteps.length < agentRecipe.length ||
+      pauseRequestedFor.current === request.id ||
       completionSubmitted.current === request.id
     ) {
       return;
     }
 
-    if (computerRun.status === 'completed') {
+    if (computerFailed) {
+      completionSubmitted.current = request.id;
+      void pause({ requestId: request.id }).catch(reason => {
+        completionSubmitted.current = null;
+        setError(String(reason));
+      });
+      return;
+    }
+
+    if (computerRun.status === 'completed' && recipeFinishedFor === request.id) {
       completionSubmitted.current = request.id;
       const observedSummary = computerRun.summary?.trim();
       void complete({
@@ -524,26 +568,18 @@ function App() {
         completionSubmitted.current = null;
         setError(String(reason));
       });
-      return;
-    }
-
-    if (computerRun.status === 'error' || computerRun.status === 'approval_required') {
-      completionSubmitted.current = request.id;
-      void pause({ requestId: request.id }).catch(reason => {
-        completionSubmitted.current = null;
-        setError(String(reason));
-      });
     }
   }, [
     complete,
+    computerFailed,
     computerRun.status,
     computerRun.summary,
     executionSurface,
     isCommander,
     joined,
     pause,
+    recipeFinishedFor,
     request,
-    requestSteps.length,
   ]);
 
   const handleJoin = async (name: string, selectedRole: string) => {
@@ -598,9 +634,23 @@ function App() {
       await resetDemo({ roomId: ROOM_ID });
       executionStarted.current = null;
       completionSubmitted.current = null;
+      pauseRequestedFor.current = null;
+      setRecipeFinishedFor(null);
     } catch (reason) {
       setError(String(reason));
     }
+  };
+
+  const handlePause = () => {
+    if (!request) return;
+    const requestId = request.id;
+    pauseRequestedFor.current = requestId;
+    completionSubmitted.current = requestId;
+    void pause({ requestId }).catch(reason => {
+      pauseRequestedFor.current = null;
+      completionSubmitted.current = null;
+      setError(String(reason));
+    });
   };
 
   const handleApprove = async () => {
@@ -676,7 +726,7 @@ function App() {
             isCommander={isCommander}
             onWindow={minutes => request && editWindow({ requestId: request.id, windowMinutes: minutes })}
             onApprove={handleApprove}
-            onPause={() => request && pause({ requestId: request.id })}
+            onPause={handlePause}
           />
           <section className="activity-rail">
             <div className="activity-rail__heading"><span className="panel-kicker">SHARED AUDIT TRAIL</span><i>{roomEvents.length}</i></div>
