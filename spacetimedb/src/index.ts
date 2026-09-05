@@ -188,13 +188,10 @@ export const onConnect = spacetimedb.clientConnected(ctx => {
   }
 });
 
-export const onDisconnect = spacetimedb.clientDisconnected(ctx => {
-  const connectedRows = [...ctx.db.participant.iter()].filter(row =>
-    row.identity.isEqual(ctx.sender) && row.online
-  );
-  for (const row of connectedRows) {
-    ctx.db.participant.id.update({ ...row, online: false });
-  }
+export const onDisconnect = spacetimedb.clientDisconnected(_ctx => {
+  // Room membership belongs to the signed-in identity, not to one browser
+  // connection. Keeping it active prevents a phone tab from knocking the
+  // same user's laptop tab offline. Presence becomes connection-aware later.
 });
 
 type VaultProvider = 'supabase' | 'langsmith';
@@ -855,7 +852,9 @@ export const joinRoom = spacetimedb.reducer(
       ctx.db.participant.id.update({
         ...existing,
         display_name: cleanName,
-        role,
+        // A second tab is another surface for the same signed-in member; it
+        // must not silently rewrite that member's server-authoritative role.
+        role: existing.role,
         online: true,
       });
     } else {
@@ -869,7 +868,13 @@ export const joinRoom = spacetimedb.reducer(
         joined_at: ctx.timestamp,
       });
     }
-    addTimeline(ctx, roomId, 'participant_joined', cleanName, `${role} joined the room`);
+    addTimeline(
+      ctx,
+      roomId,
+      'participant_joined',
+      cleanName,
+      `${existing?.role ?? role} joined the room`
+    );
   }
 );
 
@@ -936,7 +941,7 @@ export const editInvestigationWindow = spacetimedb.reducer(
   { requestId: t.u64(), windowMinutes: t.u32() },
   (ctx, { requestId, windowMinutes }) => {
     const request = requireRequest(ctx, requestId);
-    requireParticipant(ctx, request.room_id);
+    const participant = requireParticipant(ctx, request.room_id);
     if (!['proposed', 'edited'].includes(request.status)) {
       throw new SenderError('Only a proposed investigation can be edited.');
     }
@@ -953,7 +958,7 @@ export const editInvestigationWindow = spacetimedb.reducer(
       ctx,
       request.room_id,
       'investigation_edited',
-      'Incident commander',
+      participant.display_name,
       `Changed investigation window to ${windowMinutes} minutes`
     );
   }
@@ -964,8 +969,12 @@ export const approveInvestigation = spacetimedb.reducer(
   (ctx, { requestId }) => {
     const request = requireRequest(ctx, requestId);
     requireCommander(ctx, request.room_id);
+    if (['approved', 'running', 'ready_to_review'].includes(request.status)) return;
     if (!['proposed', 'edited'].includes(request.status)) {
       throw new SenderError('Investigation is not awaiting approval.');
+    }
+    if (request.window_minutes < 30) {
+      throw new SenderError('Extend the window to 30 minutes so it includes release R42.');
     }
     ctx.db.approval.insert({
       id: 0n,
@@ -995,6 +1004,7 @@ export const startInvestigation = spacetimedb.reducer(
   (ctx, { requestId }) => {
     const request = requireRequest(ctx, requestId);
     requireCommander(ctx, request.room_id);
+    if (request.status === 'running' || request.status === 'ready_to_review') return;
     if (request.status !== 'approved') {
       throw new SenderError('Investigation must be approved before it starts.');
     }
@@ -1018,9 +1028,14 @@ export const recordAgentStep = spacetimedb.reducer(
   },
   (ctx, args) => {
     const request = requireRequest(ctx, args.requestId);
+    requireCommander(ctx, request.room_id);
     if (request.status !== 'running') {
       throw new SenderError('Agent steps require a running investigation.');
     }
+    const existing = [...ctx.db.agent_step.request_id.filter(args.requestId)].find(
+      row => row.sequence === args.sequence
+    );
+    if (existing) return;
     ctx.db.agent_step.insert({
       id: 0n,
       request_id: args.requestId,
@@ -1045,9 +1060,14 @@ export const addEvidence = spacetimedb.reducer(
   },
   (ctx, args) => {
     const request = requireRequest(ctx, args.requestId);
+    requireCommander(ctx, request.room_id);
     if (request.status !== 'running') {
       throw new SenderError('Evidence requires a running investigation.');
     }
+    const existing = [...ctx.db.evidence.request_id.filter(args.requestId)].find(
+      row => row.kind === args.kind
+    );
+    if (existing) return;
     ctx.db.evidence.insert({
       id: 0n,
       request_id: args.requestId,
@@ -1069,8 +1089,23 @@ export const completeInvestigation = spacetimedb.reducer(
   },
   (ctx, args) => {
     const request = requireRequest(ctx, args.requestId);
+    requireCommander(ctx, request.room_id);
+    if (ctx.db.conclusion.request_id.find(args.requestId)) return;
     if (request.status !== 'running') {
       throw new SenderError('Only a running investigation can complete.');
+    }
+    const sequences = new Set(
+      [...ctx.db.agent_step.request_id.filter(args.requestId)].map(row => row.sequence)
+    );
+    const evidenceKinds = new Set(
+      [...ctx.db.evidence.request_id.filter(args.requestId)].map(row => row.kind)
+    );
+    if (![1, 2, 3, 4].every(sequence => sequences.has(sequence))) {
+      throw new SenderError('Conclusion requires all four verified investigation steps.');
+    }
+    if (!['DEPLOY CORRELATION', 'NEW EXCEPTION', 'IMPACT ESTIMATE', 'DEPENDENCY CHECK']
+      .every(kind => evidenceKinds.has(kind))) {
+      throw new SenderError('Conclusion requires the complete evidence set.');
     }
     ctx.db.conclusion.insert({
       request_id: args.requestId,

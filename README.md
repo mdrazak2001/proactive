@@ -7,13 +7,13 @@ The demo is deliberately narrow: determine whether release R42 or Stripe caused 
 ## What is real
 
 - SpacetimeDB synchronizes rooms, participants, transcript segments, approvals, agent steps, evidence, conclusions, and the audit timeline.
-- Reducers enforce the investigation state machine and commander-only approval/pause.
+- Reducers enforce the investigation state machine, commander-only execution, idempotent step/evidence writes, and evidence-complete conclusions.
 - Signed-in users can connect their own Supabase and LangSmith sources through fixed, bounded SpacetimeDB procedures. Credentials are submitted once, stored in a private table, and never returned or exposed through client bindings.
 - The server-side connector broker remains the runtime boundary for operator-managed connectors such as Browserbase and Supermemory.
 - The integrations console reports actual configured, verified, error, and offline states. A source is not marked verified until its provider accepts a real read.
 - SpacetimeAuth OIDC code + PKCE is wired in the React client; its ID token is passed to SpacetimeDB and to the broker without being copied into the anonymous demo token store.
 
-The War Room's observability sequence is still seeded for a deterministic demo. No remediation action is available.
+The War Room's observability sequence is seeded for a deterministic demo. Its causal board is not a client-only animation: it activates from subscribed `agent_step`, `evidence`, and `conclusion` rows, and no remediation action is available.
 
 ## Product surfaces
 
@@ -21,7 +21,9 @@ The War Room's observability sequence is still seeded for a deterministic demo. 
 - `/app/integrations` — live connector status, bounded verification, and sanitized sample receipts.
 - `/demo/war-room` — the live SpacetimeDB-backed incident room.
 
-Browserbase is the next execution/display slice, not a credential layer. API connectors retrieve evidence, SpacetimeDB synchronizes approved room state, and the visible browser will show sanitized work.
+Browserbase is optional future evidence collection, not part of the critical demo path. If a browser session is unavailable, the approved SpacetimeDB investigation still completes. API connectors retrieve sanitized source receipts; SpacetimeDB owns the shared execution trace and causal board.
+
+Do not duplicate the execution trace in Supabase. The existing SpacetimeDB tables are the product state judges can inspect: `approval`, `agent_step`, `evidence`, `conclusion`, and `timeline_event`. Supabase and LangSmith remain read-only sources whose bounded receipts can later be normalized into `evidence` rows.
 
 ## Run locally
 
@@ -99,4 +101,4 @@ removed.
 
 ## Product boundary
 
-Proactive investigates and prepares. It does not deploy, roll back, email, or change production without a separate explicit approval surface. The next build slice is testing one real customer source end to end, then feeding that receipt into the Browserbase-backed live investigation. Billing comes after that loop works for pilot users.
+Proactive investigates and prepares. It does not deploy, roll back, email, or change production without a separate explicit approval surface. The next build slice is feeding one real customer-source receipt into the same SpacetimeDB-backed causal board. Billing comes after that loop works for pilot users.
