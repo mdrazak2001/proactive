@@ -31,7 +31,6 @@ export default function LiveMeetingStage({
   activeSequence,
   playing,
   connected,
-  canControl,
   started,
   busy,
   getAnalyser,
@@ -63,19 +62,13 @@ export default function LiveMeetingStage({
         </div>
         <div className="meeting-stage__control">
           {started ? (
-            canControl ? (
-              <button type="button" disabled={busy} onClick={onReset}>
-                Reset demo
-              </button>
-            ) : (
-              <span>Commander is presenting</span>
-            )
-          ) : canControl ? (
+            <button type="button" onClick={onReset}>
+              Reset transcript
+            </button>
+          ) : (
             <button type="button" disabled={busy} onClick={onStart}>
               {playing ? 'Streaming…' : 'Start transcript'}
             </button>
-          ) : (
-            <span>Waiting for commander</span>
           )}
         </div>
       </header>

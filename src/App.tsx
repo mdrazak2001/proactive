@@ -267,17 +267,22 @@ function App() {
   };
 
   const handleReset = async () => {
-    if (!isCommander || playing) return;
     setError('');
     try {
       playbackAbortRef.current?.abort();
       playbackAbortRef.current = null;
       const player = audioPlayerRef.current;
       audioPlayerRef.current = null;
-      if (player) await player.stop();
-      await resetDemo({ roomId: ROOM_ID });
+      if (player) player.stop();
       playbackGenerationRef.current += 1;
       setActiveSequence(null);
+      setPlaying(false);
+      if (role !== 'Incident commander') {
+        await joinRoom({ roomId: ROOM_ID, displayName, role: 'Incident commander' });
+        setRole('Incident commander');
+        sessionStorage.setItem('proactive_role', 'Incident commander');
+      }
+      await resetDemo({ roomId: ROOM_ID });
     } catch (reason) {
       setError(String(reason));
     }
@@ -297,6 +302,11 @@ function App() {
           <div className="war-header__state">
             <span>{roomParticipants.length} connected</span>
             <span className={connected ? 'is-live' : ''}>{connected ? 'Live' : 'Reconnecting'}</span>
+            {(playing || roomSegments.length > 0 || Boolean(activeTranscriptRun)) && (
+              <button type="button" onClick={() => void handleReset()}>
+                Reset transcript
+              </button>
+            )}
           </div>
         </div>
       </header>
@@ -308,7 +318,7 @@ function App() {
           playing={playing}
           connected={connected}
           canControl={isCommander}
-          started={roomSegments.length > 0 || Boolean(activeTranscriptRun)}
+          started={playing || roomSegments.length > 0 || Boolean(activeTranscriptRun)}
           busy={playing}
           getAnalyser={getAnalyser}
           onStart={() => void playIncident()}

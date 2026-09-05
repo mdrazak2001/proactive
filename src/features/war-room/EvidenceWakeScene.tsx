@@ -9,11 +9,16 @@ const LENS_STOPS = [64, 300, 470, 662];
  * The spoken question becomes one optical pass along a single evidence line:
  * R42 condenses into the lens, the lens draws the 5xx rise, the applyCoupon
  * TypeError resolves from the same trail, and Stripe is optically ruled out.
- * Every beat is a committed transcript line, never a local loop.
+ *
+ * Stripe 342ms is a prior fact: it appears as soon as Cliff's line commits
+ * (beat 2), slightly before Sienna starts speaking. Her line (beat 3) only
+ * rules it out.
  */
 export default function EvidenceWakeScene({ beat, reducedMotion }: SceneProps) {
   const [contracted, setContracted] = useState(false);
   const stage = Math.min(beat, 3);
+  const showStripe = beat >= 2;
+  const ruleOutStripe = beat >= 3;
 
   useEffect(() => {
     if (beat < 3) {
@@ -100,16 +105,12 @@ export default function EvidenceWakeScene({ beat, reducedMotion }: SceneProps) {
 
         <motion.g
           initial={false}
-          animate={
-            stage >= 3
-              ? { opacity: reducedMotion ? 0.28 : [0, 0.55, 0.55, 0] }
-              : { opacity: 0 }
-          }
-          transition={
-            reducedMotion
-              ? { duration: 0 }
-              : { duration: 2, times: [0, 0.16, 0.62, 1], ease: 'linear' }
-          }
+          animate={{ opacity: showStripe ? (ruleOutStripe ? 0.28 : 0.72) : 0 }}
+          transition={{
+            duration: reducedMotion ? 0 : ruleOutStripe ? 0.7 : 0.45,
+            delay: reducedMotion || ruleOutStripe ? 0 : 0.22,
+            ease: EASE,
+          }}
         >
           <text className="scene__label" x="596" y="50">
             Stripe p95 342ms · baseline
@@ -122,8 +123,8 @@ export default function EvidenceWakeScene({ beat, reducedMotion }: SceneProps) {
             y2="46"
             pathLength="1"
             initial={reducedMotion ? false : { pathLength: 0 }}
-            animate={{ pathLength: stage >= 3 ? 1 : 0.001 }}
-            transition={{ duration: duration ?? 0.5, ease: EASE, delay: reducedMotion ? 0 : 0.55 }}
+            animate={{ pathLength: ruleOutStripe ? 1 : 0.001 }}
+            transition={{ duration: duration ?? 0.5, ease: EASE }}
           />
         </motion.g>
 

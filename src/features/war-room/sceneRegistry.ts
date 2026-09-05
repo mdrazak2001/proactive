@@ -20,6 +20,8 @@ export interface SceneProps {
   /**
    * How many transcript lines have committed since the scene's phrase was
    * spoken. Scene beats advance on row arrival, never on a local loop.
+   * Evidence-wake Stripe appears on beat 2 (after Cliff), and is ruled out
+   * on beat 3 (Sienna), so the graph leads the spoken confirmation.
    */
   beat: number;
   reducedMotion: boolean;
