@@ -10,14 +10,7 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
-export default __t.row({
-  id: __t.u64().primaryKey(),
-  roomId: __t.string().name("room_id"),
-  sequence: __t.u32(),
-  speaker: __t.string(),
-  text: __t.string(),
-  relevant: __t.bool(),
-  createdAt: __t.timestamp().name("created_at"),
-  interimText: __t.string().name("interim_text"),
-  isFinal: __t.bool().name("is_final"),
-});
+export default {
+  roomId: __t.string(),
+  runId: __t.string(),
+};

@@ -1,96 +1,14 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { reducers, tables } from './module_bindings';
 import { useReducer, useSpacetimeDB, useTable } from 'spacetimedb/react';
-import CausalEvidenceBoard from './features/war-room/CausalEvidenceBoard';
+import LiveMeetingStage from './features/war-room/LiveMeetingStage';
+import { PreparedClipPlayer, preparedClips, prefixForPlayback } from './features/war-room/preparedVoice';
 import './App.css';
 
 const ROOM_ID = 'checkout-r42';
 
-const transcriptScript = [
-  {
-    speaker: 'Priya · Incident commander',
-    text: 'Checkout failures are climbing. We are at twelve percent errors now.',
-    relevant: false,
-  },
-  {
-    speaker: 'Noah · Checkout',
-    text: 'Release R42 went out at 2:14. The first alert fired a few minutes later.',
-    relevant: false,
-  },
-  {
-    speaker: 'Priya · Incident commander',
-    text: 'Compare before and after that deploy, open the new error group, and check whether Stripe latency changed. Read only—do not touch production.',
-    relevant: true,
-  },
-  {
-    speaker: 'Maya · Support',
-    text: 'Enterprise customers are still reporting failed coupon checkouts.',
-    relevant: false,
-  },
-];
-
-const agentRecipe = [
-  {
-    label: 'Set investigation scope',
-    detail: 'checkout-api · production · approved time window',
-    screenshotRef: 'scope',
-  },
-  {
-    label: 'Overlay release markers',
-    detail: 'Release R42 deployed at 14:14:08',
-    screenshotRef: 'deploy',
-    evidence: [{
-      kind: 'DEPLOY CORRELATION',
-      headline: 'Errors rose 2m after R42',
-      detail: 'Checkout 5xx moved from 0.8% to 12.6% immediately after release.',
-      value: '+11.8 pp',
-    }],
-  },
-  {
-    label: 'Open new error group',
-    detail: 'TypeError in applyCoupon first seen after R42',
-    screenshotRef: 'error',
-    evidence: [
-      {
-        kind: 'NEW EXCEPTION',
-        headline: 'applyCoupon TypeError',
-        detail: 'First seen in R42; isolated to coupon-enabled checkout requests.',
-        value: 'R42 only',
-      },
-      {
-        kind: 'IMPACT ESTIMATE',
-        headline: '≈106 failed requests/min',
-        detail: 'Derived from 842 checkout requests/min × 12.6% failure rate in the seeded incident.',
-        value: '≈106/min',
-      },
-    ],
-  },
-  {
-    label: 'Compare Stripe dependency',
-    detail: 'Stripe p95 and error rate remained inside baseline',
-    screenshotRef: 'dependency',
-    evidence: [{
-      kind: 'DEPENDENCY CHECK',
-      headline: 'Stripe remained healthy',
-      detail: 'Latency and error rate stayed within the previous 24-hour baseline.',
-      value: '342ms p95',
-    }],
-  },
-];
-
-const wait = (ms: number) => new Promise(resolve => window.setTimeout(resolve, ms));
-
-function formatTime(value: { microsSinceUnixEpoch: bigint }) {
-  const date = new Date(Number(value.microsSinceUnixEpoch / 1000n));
-  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-}
-
 function compareBigInt(a: bigint, b: bigint) {
   return a < b ? -1 : a > b ? 1 : 0;
-}
-
-function StatusGlyph({ status }: { status: string }) {
-  return <span className={`status-glyph status-glyph--${status}`} aria-hidden="true" />;
 }
 
 function ProactiveMark() {
@@ -125,7 +43,7 @@ function JoinScreen({ connected, onJoin }: {
       <section className="join-card">
         <div className="join-card__eyebrow">LIVE INCIDENT ROOM · SEV-1</div>
         <h1>Join the checkout<br />investigation.</h1>
-        <p>One shared, read-only agent computer. Everyone sees what it checks; only the commander can move it forward.</p>
+        <p>One shared incident bridge. What the room says out loud opens the actions every responder can see.</p>
         <form onSubmit={submit}>
           <label>
             Display name
@@ -137,6 +55,7 @@ function JoinScreen({ connected, onJoin }: {
               <button
                 type="button"
                 key={option}
+                aria-pressed={role === option}
                 className={role === option ? 'role-option is-selected' : 'role-option'}
                 onClick={() => setRole(option)}
               >
@@ -155,210 +74,38 @@ function JoinScreen({ connected, onJoin }: {
   );
 }
 
-function AgentComputer({ request, steps, evidenceRows, conclusionRow, connected }: {
-  request: any;
-  steps: readonly any[];
-  evidenceRows: readonly any[];
-  conclusionRow: any;
-  connected: boolean;
-}) {
-  const running = request?.status === 'running';
-  const waiting = request && ['proposed', 'edited', 'approved'].includes(request.status);
-  const latestStep = steps.length > 0 ? steps[steps.length - 1] : undefined;
-  const receiptLabel = conclusionRow
-    ? 'CONCLUSION READY'
-    : running
-      ? `LIVE EXECUTION · ${steps.length} OF 4 STEPS COMMITTED`
-      : request?.status === 'approved'
-        ? 'STARTING SHARED RUN'
-      : waiting
-        ? 'APPROVAL REQUIRED'
-        : 'AGENT STATUS';
-  const receiptText = conclusionRow?.summary
-    ?? latestStep?.label
-    ?? (running ? 'Opening approved read-only scope' : undefined)
-    ?? (waiting ? 'Waiting for approval' : 'Standing by');
-
-  return (
-    <section className="agent-panel">
-      <div className="panel-heading">
-        <div>
-          <span className="panel-kicker">SHARED EXECUTION SURFACE</span>
-          <h2>Agent Computer</h2>
-        </div>
-        <div className="guardrail-badge"><span>◆</span> SANDBOX · READ ONLY</div>
-      </div>
-
-      <div className={`computer-frame ${running ? 'is-running' : ''}`}>
-        <div className="computer-chrome">
-          <div className="computer-dots"><i /><i /><i /></div>
-          <div className="computer-address">spacetime://proactive/checkout-r42/evidence</div>
-          <div className="computer-live"><span /> SHARED LIVE STATE</div>
-        </div>
-
-        {!request ? (
-          <div className="computer-idle">
-            <div className="idle-radar"><span /><span /><span /></div>
-            <strong>Waiting for a diagnostic question</strong>
-            <p>Approve one read-only investigation and watch database rows assemble the causal path.</p>
-          </div>
-        ) : (
-          <CausalEvidenceBoard
-            request={request}
-            steps={steps}
-            evidenceRows={evidenceRows}
-            conclusionRow={conclusionRow}
-            connected={connected}
-          />
-        )}
-      </div>
-
-      <div className="execution-receipt" aria-live="polite">
-        <div className="execution-receipt__lead">
-          <StatusGlyph status={conclusionRow ? 'ready' : running ? 'running' : request?.status ?? 'idle'} />
-          <div>
-            <span>{receiptLabel}</span>
-            <strong>{receiptText}</strong>
-          </div>
-        </div>
-        {running && <div className="running-bars"><i /><i /><i /><i /><i /></div>}
-      </div>
-    </section>
-  );
-}
-
-function InvestigationOrder({ request, isCommander, onWindow, onApprove, onPause }: {
-  request: any;
-  isCommander: boolean;
-  onWindow: (minutes: number) => void;
-  onApprove: () => void;
-  onPause: () => void;
-}) {
-  if (!request) {
-    return (
-      <section className="order-card order-card--empty">
-        <div className="order-card__signal">⌁</div>
-        <span className="panel-kicker">LISTENING</span>
-        <h2>I’ll surface one investigation.</h2>
-        <p>Ask for a concrete diagnostic check and name what must not change.</p>
-      </section>
-    );
-  }
-
-  const awaitingApproval = ['proposed', 'edited'].includes(request.status);
-  const approved = ['approved', 'running', 'ready_to_review'].includes(request.status);
-
-  return (
-    <section className={`order-card ${approved ? 'is-approved' : ''}`}>
-      <div className="order-card__topline">
-        <span className="panel-kicker">INVESTIGATION ORDER</span>
-        <span className="readonly-stamp">READ ONLY</span>
-      </div>
-      <h2>{request.prompt}</h2>
-      <dl className="scope-list">
-        <div><dt>Target</dt><dd>{request.targetService}</dd></div>
-        <div><dt>Environment</dt><dd>Production mirror</dd></div>
-        <div><dt>Actions</dt><dd>4 allowlisted checks</dd></div>
-        <div><dt>Constraint</dt><dd>{request.constraints}</dd></div>
-      </dl>
-
-      {awaitingApproval && (
-        <div className="window-control">
-          <span>INVESTIGATION WINDOW</span>
-          <div>
-            {[15, 30].map(minutes => (
-              <button
-                type="button"
-                key={minutes}
-                className={request.windowMinutes === minutes ? 'is-active' : ''}
-                onClick={() => onWindow(minutes)}
-              >{minutes} min</button>
-            ))}
-          </div>
-          {request.windowMinutes === 15 && <p>15 minutes excludes the release marker. A responder can correct this live.</p>}
-        </div>
-      )}
-
-      {awaitingApproval && isCommander && (
-        <button className="approve-button" type="button" onClick={onApprove} disabled={request.windowMinutes < 30}>
-          <span>{request.windowMinutes < 30 ? 'Extend window to approve' : 'Approve investigation'}</span><i>⌘ ↵</i>
-        </button>
-      )}
-      {awaitingApproval && !isCommander && <p className="observer-note">Waiting for the incident commander to approve.</p>}
-      {request.status === 'running' && isCommander && (
-        <button className="pause-button" type="button" onClick={onPause}>Pause agent</button>
-      )}
-      {approved && request.status !== 'running' && (
-        <div className="approval-receipt"><span>✓</span><div><strong>{request.status === 'ready_to_review' ? 'Investigation complete' : 'Approved'}</strong><p>Scope locked in the shared audit trail</p></div></div>
-      )}
-    </section>
-  );
-}
-
-function MobileCommanderBar({ request, isCommander, onApprove, onPause, onReset }: {
-  request: any;
-  isCommander: boolean;
-  onApprove: () => void;
-  onPause: () => void;
-  onReset: () => void;
-}) {
-  if (!request || !isCommander) return null;
-  const awaitingApproval = ['proposed', 'edited'].includes(request.status);
-  const running = request.status === 'running';
-  const ready = request.status === 'ready_to_review';
-  const paused = request.status === 'paused';
-
-  return (
-    <div className={`mobile-commander-bar ${ready ? 'is-ready' : ''}`}>
-      <div>
-        <span>COMMANDER CONTROL</span>
-        <strong>{ready ? 'Conclusion ready' : paused ? 'Investigation paused' : running ? 'Agent is investigating' : awaitingApproval ? `${request.windowMinutes} min · read only` : 'Starting shared run…'}</strong>
-      </div>
-      {awaitingApproval && <button type="button" onClick={onApprove} disabled={request.windowMinutes < 30}>{request.windowMinutes < 30 ? 'Set 30 min' : 'Approve'} <i>→</i></button>}
-      {running && <button className="is-secondary" type="button" onClick={onPause}>Pause</button>}
-      {paused && <button className="is-secondary" type="button" onClick={onReset}>Reset</button>}
-      {ready && <span className="mobile-commander-bar__ready">✓ REVIEW</span>}
-    </div>
-  );
-}
-
 function App() {
   const { isActive: connected } = useSpacetimeDB();
   const [joined, setJoined] = useState(() => sessionStorage.getItem('proactive_joined') === 'true');
   const [displayName, setDisplayName] = useState(() => sessionStorage.getItem('proactive_name') ?? 'Mohammed');
   const [role, setRole] = useState(() => sessionStorage.getItem('proactive_role') ?? 'Incident commander');
   const [playing, setPlaying] = useState(false);
+  const [activeSequence, setActiveSequence] = useState<number | null>(null);
   const [error, setError] = useState('');
 
   const [rooms] = useTable(tables.incidentRoom);
   const [participants] = useTable(tables.participant);
   const [segments] = useTable(tables.transcriptSegment);
+  const [transcriptRuns] = useTable(tables.transcriptRun);
   const [requests] = useTable(tables.investigationRequest);
-  const [steps] = useTable(tables.agentStep);
-  const [evidenceRows] = useTable(tables.evidence);
-  const [conclusions] = useTable(tables.conclusion);
-  const [events] = useTable(tables.timelineEvent);
 
   const createDemoRoom = useReducer(reducers.createDemoRoom);
   const joinRoom = useReducer(reducers.joinRoom);
-  const appendTranscript = useReducer(reducers.appendTranscriptSegment);
+  const acquireTranscriptRun = useReducer(reducers.acquireTranscriptRun);
+  const releaseTranscriptRun = useReducer(reducers.releaseTranscriptRun);
+  const publishTranscriptResult = useReducer(reducers.publishTranscriptResult);
+  const finalizeTranscriptSegment = useReducer(reducers.finalizeTranscriptSegment);
+  const discardTranscriptInterim = useReducer(reducers.discardTranscriptInterim);
   const proposeInvestigation = useReducer(reducers.proposeInvestigation);
-  const editWindow = useReducer(reducers.editInvestigationWindow);
-  const approve = useReducer(reducers.approveInvestigation);
-  const start = useReducer(reducers.startInvestigation);
-  const recordStep = useReducer(reducers.recordAgentStep);
-  const addEvidence = useReducer(reducers.addEvidence);
-  const complete = useReducer(reducers.completeInvestigation);
-  const pause = useReducer(reducers.pauseInvestigation);
   const resetDemo = useReducer(reducers.resetDemo);
 
   const roomRequested = useRef(false);
   const participantJoinRequested = useRef(false);
-  const executionStarted = useRef<bigint | null>(null);
-  const completionSubmitted = useRef<bigint | null>(null);
-  const pauseRequestedFor = useRef<bigint | null>(null);
-  const [recipeFinishedFor, setRecipeFinishedFor] = useState<bigint | null>(null);
+  const playbackGenerationRef = useRef(0);
+  const playbackAbortRef = useRef<AbortController | null>(null);
+  const audioPlayerRef = useRef<PreparedClipPlayer | null>(null);
   const room = rooms.find(item => item.roomId === ROOM_ID);
+  const activeTranscriptRun = transcriptRuns.find(item => item.roomId === ROOM_ID);
   const roomParticipants = participants.filter(item => item.roomId === ROOM_ID && item.online);
   const roomSegments = useMemo(
     () => segments.filter(item => item.roomId === ROOM_ID).sort((a, b) => a.sequence - b.sequence),
@@ -369,19 +116,6 @@ function App() {
     [requests]
   );
   const request = roomRequests.length > 0 ? roomRequests[roomRequests.length - 1] : undefined;
-  const requestSteps = useMemo(
-    () => request ? steps.filter(item => item.requestId === request.id).sort((a, b) => a.sequence - b.sequence) : [],
-    [request, steps]
-  );
-  const requestEvidence = useMemo(
-    () => request ? evidenceRows.filter(item => item.requestId === request.id) : [],
-    [request, evidenceRows]
-  );
-  const conclusionRow = request ? conclusions.find(item => item.requestId === request.id) : undefined;
-  const roomEvents = useMemo(
-    () => events.filter(item => item.roomId === ROOM_ID).sort((a, b) => compareBigInt(b.id, a.id)).slice(0, 8),
-    [events]
-  );
   const isCommander = role === 'Incident commander';
 
   useEffect(() => {
@@ -405,133 +139,14 @@ function App() {
       });
   }, [connected, displayName, joinRoom, joined, role, room]);
 
-  useEffect(() => {
-    if (
-      !joined ||
-      !isCommander ||
-      request?.status !== 'running'
-    ) return;
-    if (executionStarted.current === request.id) return;
-    const requestId = request.id;
-    executionStarted.current = requestId;
-    setRecipeFinishedFor(null);
-    let cancelled = false;
-
-    const run = async () => {
-      const commit = async (operation: () => Promise<unknown>) => {
-        let lastError: unknown;
-        for (let attempt = 0; attempt < 3; attempt += 1) {
-          if (cancelled || pauseRequestedFor.current === requestId) return false;
-          try {
-            await operation();
-            return true;
-          } catch (reason) {
-            lastError = reason;
-            if (cancelled || pauseRequestedFor.current === requestId) return false;
-            if (attempt < 2) await wait(250 * (attempt + 1));
-          }
-        }
-        throw lastError;
-      };
-      const recordedSequences = new Set(requestSteps.map(step => step.sequence));
-      const recordedEvidenceKinds = new Set(requestEvidence.map(row => row.kind));
-      for (let index = 0; index < agentRecipe.length; index += 1) {
-        if (cancelled) return;
-        const step = agentRecipe[index];
-        let changed = false;
-        const sequence = index + 1;
-        if (!recordedSequences.has(sequence)) {
-          const committed = await commit(() => recordStep({
-            requestId,
-            sequence,
-            label: step.label,
-            detail: step.detail,
-            status: 'complete',
-            screenshotRef: step.screenshotRef,
-          }));
-          if (!committed || cancelled) return;
-          recordedSequences.add(sequence);
-          changed = true;
-        }
-        if (changed) await wait(280);
-        for (const evidence of step.evidence ?? []) {
-          if (cancelled) return;
-          if (!recordedEvidenceKinds.has(evidence.kind)) {
-            const committed = await commit(() => addEvidence({ requestId, ...evidence }));
-            if (!committed || cancelled) return;
-            recordedEvidenceKinds.add(evidence.kind);
-            changed = true;
-            await wait(320);
-          }
-        }
-      }
-      if (!cancelled) setRecipeFinishedFor(requestId);
-    };
-
-    run().catch(reason => {
-      if (cancelled || pauseRequestedFor.current === requestId) return;
-      setError(String(reason));
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    addEvidence,
-    isCommander,
-    joined,
-    recordStep,
-    request?.id,
-    request?.status,
-  ]);
-
-  useEffect(() => {
-    if (
-      !joined ||
-      !isCommander ||
-      !request ||
-      request.status !== 'running' ||
-      pauseRequestedFor.current === request.id ||
-      completionSubmitted.current === request.id
-    ) {
-      return;
-    }
-
-    if (recipeFinishedFor === request.id) {
-      completionSubmitted.current = request.id;
-      let cancelled = false;
-      const submit = async () => {
-        let lastError: unknown;
-        for (let attempt = 0; attempt < 3; attempt += 1) {
-          if (cancelled || pauseRequestedFor.current === request.id) return;
-          try {
-            await complete({
-              requestId: request.id,
-              summary: 'R42 is the leading cause: failures began two minutes after deploy, the new applyCoupon TypeError is release-specific, and Stripe remained healthy.',
-              confidence: 'HIGH · 4 RECEIPTS',
-              recommendation: 'Review rollback of R42 and isolate coupon checkout. No production action has been taken.',
-            });
-            return;
-          } catch (reason) {
-            lastError = reason;
-            if (cancelled || pauseRequestedFor.current === request.id) return;
-            if (attempt < 2) await wait(300 * (attempt + 1));
-          }
-        }
-        completionSubmitted.current = null;
-        setError(String(lastError));
-      };
-      void submit();
-      return () => {
-        cancelled = true;
-      };
-    }
-  }, [
-    complete,
-    isCommander,
-    joined,
-    recipeFinishedFor,
-    request,
-  ]);
+  useEffect(() => () => {
+    playbackGenerationRef.current += 1;
+    playbackAbortRef.current?.abort();
+    playbackAbortRef.current = null;
+    const player = audioPlayerRef.current;
+    audioPlayerRef.current = null;
+    if (player) void player.stop();
+  }, []);
 
   const handleJoin = async (name: string, selectedRole: string) => {
     setDisplayName(name);
@@ -549,34 +164,105 @@ function App() {
     }
   };
 
+  /** The stage reads speaker amplitude from the clip that is actually playing. */
+  const getAnalyser = useCallback(() => audioPlayerRef.current?.getAnalyser(), []);
+
   const playIncident = async () => {
-    if (playing || roomSegments.length || request) return;
+    if (playing || roomSegments.length || request || activeTranscriptRun) return;
+    const playbackGeneration = playbackGenerationRef.current + 1;
+    playbackGenerationRef.current = playbackGeneration;
+    const runId = crypto.randomUUID();
+    const abortController = new AbortController();
+    const audioPlayer = new PreparedClipPlayer();
+    playbackAbortRef.current = abortController;
+    audioPlayerRef.current = audioPlayer;
+    let currentSequence: number | null = null;
+    let runLeaseAcquired = false;
     setPlaying(true);
     setError('');
     try {
-      for (let index = 0; index < transcriptScript.length; index += 1) {
-        const line = transcriptScript[index];
-        await appendTranscript({
+      // Start Kit's first clip in this click turn, before any network wait.
+      let pendingPlayback = audioPlayer.begin(preparedClips[0].src, abortController.signal);
+      await acquireTranscriptRun({ roomId: ROOM_ID, runId });
+      runLeaseAcquired = true;
+
+      for (const [index, clip] of preparedClips.entries()) {
+        if (playbackGenerationRef.current !== playbackGeneration) return;
+        if (abortController.signal.aborted) return;
+        currentSequence = clip.sequence;
+        setActiveSequence(clip.sequence);
+        const publishInterim = async (text: string) => {
+          await publishTranscriptResult({
+            roomId: ROOM_ID,
+            sequence: clip.sequence,
+            speaker: clip.speaker,
+            text,
+            relevant: clip.relevant,
+            isFinal: false,
+          });
+        };
+        await publishInterim(prefixForPlayback(clip.text, 0.08));
+        const element = audioPlayer.getElement();
+        const progressTimer = window.setInterval(() => {
+          if (!element?.duration) return;
+          void publishInterim(prefixForPlayback(clip.text, element.currentTime / element.duration));
+        }, 90);
+        await pendingPlayback;
+        window.clearInterval(progressTimer);
+        if (playbackGenerationRef.current !== playbackGeneration) return;
+        await publishTranscriptResult({
           roomId: ROOM_ID,
-          sequence: index + 1,
-          speaker: line.speaker,
-          text: line.text,
-          relevant: line.relevant,
+          sequence: clip.sequence,
+          speaker: clip.speaker,
+          text: clip.text,
+          relevant: clip.relevant,
+          isFinal: true,
         });
-        await wait(index === 2 ? 1250 : 800);
+        await finalizeTranscriptSegment({ roomId: ROOM_ID, sequence: clip.sequence });
+        currentSequence = null;
+        setActiveSequence(null);
+        const next = preparedClips[index + 1];
+        pendingPlayback = next
+          ? audioPlayer.play(next.src, abortController.signal)
+          : Promise.resolve();
       }
+
+      if (playbackGenerationRef.current !== playbackGeneration) return;
       await proposeInvestigation({
         roomId: ROOM_ID,
         sourceSegmentId: 0n,
-        prompt: 'Did R42 cause checkout failures, or is Stripe degrading?',
+        prompt: 'Did R42 cause the checkout TypeErrors, or is Stripe degrading?',
         targetService: 'checkout-api',
         windowMinutes: 15,
         constraints: 'No writes · No shell · No production changes',
       });
     } catch (reason) {
-      setError(String(reason));
+      const cancelledByCaller = abortController.signal.aborted;
+      if (!cancelledByCaller) abortController.abort();
+      if (currentSequence !== null) {
+        try {
+          await discardTranscriptInterim({ roomId: ROOM_ID, sequence: currentSequence });
+        } catch {
+          // Keep the original transport error; reset remains available if the
+          // client disconnected before cleanup could reach SpacetimeDB.
+        }
+      }
+      if (!cancelledByCaller) setError(String(reason));
     } finally {
-      setPlaying(false);
+      if (runLeaseAcquired) {
+        try {
+          await releaseTranscriptRun({ roomId: ROOM_ID, runId });
+        } catch (reason) {
+          if (!abortController.signal.aborted) setError(current => current || String(reason));
+        }
+      }
+      await audioPlayer.stop();
+      if (playbackAbortRef.current === abortController) playbackAbortRef.current = null;
+      if (audioPlayerRef.current === audioPlayer) audioPlayerRef.current = null;
+      if (playbackGenerationRef.current === playbackGeneration) {
+        setActiveSequence(null);
+        setPlaying(false);
+      }
     }
   };
 
@@ -584,38 +270,14 @@ function App() {
     if (!isCommander || playing) return;
     setError('');
     try {
+      playbackAbortRef.current?.abort();
+      playbackAbortRef.current = null;
+      const player = audioPlayerRef.current;
+      audioPlayerRef.current = null;
+      if (player) await player.stop();
       await resetDemo({ roomId: ROOM_ID });
-      executionStarted.current = null;
-      completionSubmitted.current = null;
-      pauseRequestedFor.current = null;
-      setRecipeFinishedFor(null);
-    } catch (reason) {
-      setError(String(reason));
-    }
-  };
-
-  const handlePause = () => {
-    if (!request) return;
-    const requestId = request.id;
-    pauseRequestedFor.current = requestId;
-    completionSubmitted.current = requestId;
-    void pause({ requestId }).catch(reason => {
-      pauseRequestedFor.current = null;
-      completionSubmitted.current = null;
-      setError(String(reason));
-    });
-  };
-
-  const handleApprove = async () => {
-    if (!request) return;
-    if (request.windowMinutes < 30) {
-      setError('Use the 30 minute window so the approved scope includes release R42.');
-      return;
-    }
-    try {
-      await approve({ requestId: request.id });
-      await wait(350);
-      await start({ requestId: request.id });
+      playbackGenerationRef.current += 1;
+      setActiveSequence(null);
     } catch (reason) {
       setError(String(reason));
     }
@@ -626,92 +288,33 @@ function App() {
   return (
     <div className="app-shell">
       <header className="war-header">
-        <div className="war-header__brand"><ProactiveMark /><span className="header-divider" /></div>
-        <div className="incident-identity">
-          <span className="severity-badge">SEV-1</span>
-          <div><strong>{room?.title ?? 'Opening incident room…'}</strong><span>INC-2048 · Started 14:17 IST</span></div>
-        </div>
-        <div className="war-header__right" data-connection={connected ? 'LIVE' : 'RECONNECTING'}>
-          <div className="presence-stack" aria-label={`${roomParticipants.length} connected participants`}>
-            {roomParticipants.slice(0, 4).map((person, index) => <span key={String(person.id)} style={{ zIndex: 4 - index }}>{person.displayName.slice(0, 1).toUpperCase()}</span>)}
-            <i>{Math.max(roomParticipants.length, 1)} live</i>
+        <div className="war-header__inner">
+          <ProactiveMark />
+          <div className="incident-identity">
+            <strong>{room?.title ?? 'Opening incident room…'}</strong>
+            <span>INC-2048 · SEV-1</span>
           </div>
-          <div className={`connection-pill ${connected ? 'is-live' : ''}`}><span />{connected ? 'Main room live' : 'Reconnecting'}</div>
+          <div className="war-header__state">
+            <span>{roomParticipants.length} connected</span>
+            <span className={connected ? 'is-live' : ''}>{connected ? 'Live' : 'Reconnecting'}</span>
+          </div>
         </div>
       </header>
 
-      <main className="workspace">
-        <aside className="transcript-panel">
-          <div className="panel-heading panel-heading--compact">
-            <div><span className="panel-kicker">MEETING SENSOR</span><h2>Live transcript</h2></div>
-            <span className="transcript-pulse"><i /><i /><i /></span>
-          </div>
-          <div className="transcript-stream" aria-live="polite">
-            {roomSegments.length === 0 ? (
-              <div className="transcript-empty"><span>···</span><p>Conversation will appear here. The transcript is context—not the product.</p></div>
-            ) : roomSegments.map(segment => (
-              <article key={String(segment.id)} className={segment.relevant ? 'transcript-line is-relevant' : 'transcript-line'}>
-                <span>{segment.speaker}</span>
-                <p>{segment.text}</p>
-                {segment.relevant && <i>Investigation detected →</i>}
-              </article>
-            ))}
-            {playing && <div className="typing-line"><i /><i /><i /></div>}
-          </div>
-          <div className="demo-control">
-            {roomSegments.length > 0 ? (
-              isCommander && (
-                <button type="button" disabled={playing || request?.status === 'running'} onClick={handleReset}>
-                  <span>Reset prepared incident</span><i>↻</i>
-                </button>
-              )
-            ) : (
-              <button type="button" disabled={playing} onClick={playIncident}>
-                <span>{playing ? 'Streaming incident…' : 'Play prepared incident'}</span>
-                <i>{playing ? '●' : '▶'}</i>
-              </button>
-            )}
-            <p>Deterministic transcript · demo mode</p>
-          </div>
-        </aside>
-
-        <AgentComputer request={request} steps={requestSteps} evidenceRows={requestEvidence} conclusionRow={conclusionRow} connected={connected} />
-
-        <aside className="rail-panel">
-          <InvestigationOrder
-            request={request}
-            isCommander={isCommander}
-            onWindow={minutes => request && editWindow({ requestId: request.id, windowMinutes: minutes })}
-            onApprove={handleApprove}
-            onPause={handlePause}
-          />
-          <section className="activity-rail">
-            <div className="activity-rail__heading"><span className="panel-kicker">SHARED AUDIT TRAIL</span><i>{roomEvents.length}</i></div>
-            <div className="activity-list">
-              {roomEvents.map(event => (
-                <article key={String(event.id)}>
-                  <span>{formatTime(event.createdAt)}</span>
-                  <div><strong>{event.actor}</strong><p>{event.body}</p></div>
-                </article>
-              ))}
-              {roomEvents.length === 0 && <p className="activity-empty">Every decision and computer action will appear here.</p>}
-            </div>
-          </section>
-        </aside>
-      </main>
-
-      <MobileCommanderBar
-        request={request}
-        isCommander={isCommander}
-        onApprove={handleApprove}
-        onPause={handlePause}
-        onReset={handleReset}
-      />
-
-      <footer className="war-footer">
-        <span>Signed in as <strong>{displayName}</strong> · {role}</span>
-        <span>Agent boundary: <strong>observe and prepare</strong> · never remediate</span>
-      </footer>
+      <div className="stage-page">
+        <LiveMeetingStage
+          segments={roomSegments}
+          activeSequence={activeSequence}
+          playing={playing}
+          connected={connected}
+          canControl={isCommander}
+          started={roomSegments.length > 0 || Boolean(activeTranscriptRun)}
+          busy={playing}
+          getAnalyser={getAnalyser}
+          onStart={() => void playIncident()}
+          onReset={() => void handleReset()}
+        />
+      </div>
 
       {error && <div className="error-toast" role="alert"><strong>Couldn’t complete that action</strong><span>{error}</span><button onClick={() => setError('')} aria-label="Dismiss error">×</button></div>}
     </div>

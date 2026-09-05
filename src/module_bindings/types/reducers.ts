@@ -6,29 +6,39 @@
 import { type Infer as __Infer } from "spacetimedb";
 
 // Import all reducer arg schemas
+import AcquireTranscriptRunReducer from "../acquire_transcript_run_reducer";
 import AddEvidenceReducer from "../add_evidence_reducer";
 import AppendTranscriptSegmentReducer from "../append_transcript_segment_reducer";
 import ApproveInvestigationReducer from "../approve_investigation_reducer";
 import CompleteInvestigationReducer from "../complete_investigation_reducer";
 import CreateDemoRoomReducer from "../create_demo_room_reducer";
+import DiscardTranscriptInterimReducer from "../discard_transcript_interim_reducer";
 import EditInvestigationWindowReducer from "../edit_investigation_window_reducer";
+import FinalizeTranscriptSegmentReducer from "../finalize_transcript_segment_reducer";
 import JoinRoomReducer from "../join_room_reducer";
 import PauseInvestigationReducer from "../pause_investigation_reducer";
 import ProposeInvestigationReducer from "../propose_investigation_reducer";
+import PublishTranscriptResultReducer from "../publish_transcript_result_reducer";
 import RecordAgentStepReducer from "../record_agent_step_reducer";
+import ReleaseTranscriptRunReducer from "../release_transcript_run_reducer";
 import ResetDemoReducer from "../reset_demo_reducer";
 import StartInvestigationReducer from "../start_investigation_reducer";
 
+export type AcquireTranscriptRunParams = __Infer<typeof AcquireTranscriptRunReducer>;
 export type AddEvidenceParams = __Infer<typeof AddEvidenceReducer>;
 export type AppendTranscriptSegmentParams = __Infer<typeof AppendTranscriptSegmentReducer>;
 export type ApproveInvestigationParams = __Infer<typeof ApproveInvestigationReducer>;
 export type CompleteInvestigationParams = __Infer<typeof CompleteInvestigationReducer>;
 export type CreateDemoRoomParams = __Infer<typeof CreateDemoRoomReducer>;
+export type DiscardTranscriptInterimParams = __Infer<typeof DiscardTranscriptInterimReducer>;
 export type EditInvestigationWindowParams = __Infer<typeof EditInvestigationWindowReducer>;
+export type FinalizeTranscriptSegmentParams = __Infer<typeof FinalizeTranscriptSegmentReducer>;
 export type JoinRoomParams = __Infer<typeof JoinRoomReducer>;
 export type PauseInvestigationParams = __Infer<typeof PauseInvestigationReducer>;
 export type ProposeInvestigationParams = __Infer<typeof ProposeInvestigationReducer>;
+export type PublishTranscriptResultParams = __Infer<typeof PublishTranscriptResultReducer>;
 export type RecordAgentStepParams = __Infer<typeof RecordAgentStepReducer>;
+export type ReleaseTranscriptRunParams = __Infer<typeof ReleaseTranscriptRunReducer>;
 export type ResetDemoParams = __Infer<typeof ResetDemoReducer>;
 export type StartInvestigationParams = __Infer<typeof StartInvestigationReducer>;
 

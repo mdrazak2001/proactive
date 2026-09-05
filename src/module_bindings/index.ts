@@ -34,16 +34,21 @@ import {
 } from "spacetimedb";
 
 // Import all reducer arg schemas
+import AcquireTranscriptRunReducer from "./acquire_transcript_run_reducer";
 import AddEvidenceReducer from "./add_evidence_reducer";
 import AppendTranscriptSegmentReducer from "./append_transcript_segment_reducer";
 import ApproveInvestigationReducer from "./approve_investigation_reducer";
 import CompleteInvestigationReducer from "./complete_investigation_reducer";
 import CreateDemoRoomReducer from "./create_demo_room_reducer";
+import DiscardTranscriptInterimReducer from "./discard_transcript_interim_reducer";
 import EditInvestigationWindowReducer from "./edit_investigation_window_reducer";
+import FinalizeTranscriptSegmentReducer from "./finalize_transcript_segment_reducer";
 import JoinRoomReducer from "./join_room_reducer";
 import PauseInvestigationReducer from "./pause_investigation_reducer";
 import ProposeInvestigationReducer from "./propose_investigation_reducer";
+import PublishTranscriptResultReducer from "./publish_transcript_result_reducer";
 import RecordAgentStepReducer from "./record_agent_step_reducer";
+import ReleaseTranscriptRunReducer from "./release_transcript_run_reducer";
 import ResetDemoReducer from "./reset_demo_reducer";
 import StartInvestigationReducer from "./start_investigation_reducer";
 
@@ -64,6 +69,7 @@ import IncidentRoomRow from "./incident_room_table";
 import InvestigationRequestRow from "./investigation_request_table";
 import ParticipantRow from "./participant_table";
 import TimelineEventRow from "./timeline_event_table";
+import TranscriptRunRow from "./transcript_run_table";
 import TranscriptSegmentRow from "./transcript_segment_table";
 
 /** Type-only namespace exports for generated type groups. */
@@ -176,6 +182,17 @@ const tablesSchema = __schema({
       { name: 'timeline_event_id_key', constraint: 'unique', columns: ['id'] },
     ],
   }, TimelineEventRow),
+  transcriptRun: __table({
+    name: 'transcript_run',
+    indexes: [
+      { accessor: 'room_id', name: 'transcript_run_room_id_idx_btree', algorithm: 'btree', columns: [
+        'roomId',
+      ] },
+    ],
+    constraints: [
+      { name: 'transcript_run_room_id_key', constraint: 'unique', columns: ['roomId'] },
+    ],
+  }, TranscriptRunRow),
   transcriptSegment: __table({
     name: 'transcript_segment',
     indexes: [
@@ -194,16 +211,21 @@ const tablesSchema = __schema({
 
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
 const reducersSchema = __reducers(
+  __reducerSchema("acquire_transcript_run", AcquireTranscriptRunReducer),
   __reducerSchema("add_evidence", AddEvidenceReducer),
   __reducerSchema("append_transcript_segment", AppendTranscriptSegmentReducer),
   __reducerSchema("approve_investigation", ApproveInvestigationReducer),
   __reducerSchema("complete_investigation", CompleteInvestigationReducer),
   __reducerSchema("create_demo_room", CreateDemoRoomReducer),
+  __reducerSchema("discard_transcript_interim", DiscardTranscriptInterimReducer),
   __reducerSchema("edit_investigation_window", EditInvestigationWindowReducer),
+  __reducerSchema("finalize_transcript_segment", FinalizeTranscriptSegmentReducer),
   __reducerSchema("join_room", JoinRoomReducer),
   __reducerSchema("pause_investigation", PauseInvestigationReducer),
   __reducerSchema("propose_investigation", ProposeInvestigationReducer),
+  __reducerSchema("publish_transcript_result", PublishTranscriptResultReducer),
   __reducerSchema("record_agent_step", RecordAgentStepReducer),
+  __reducerSchema("release_transcript_run", ReleaseTranscriptRunReducer),
   __reducerSchema("reset_demo", ResetDemoReducer),
   __reducerSchema("start_investigation", StartInvestigationReducer),
 );
@@ -228,6 +250,8 @@ type __SchemaWithTableAccessorAliases = Omit<typeof tablesSchema.schemaType, "ta
     readonly "investigation_request": Omit<typeof tablesSchema.schemaType.tables["investigationRequest"], "accessorName"> & { readonly accessorName: "investigation_request" };
     /** @deprecated Use `timelineEvent` instead. This alias will be removed in the next major version. */
     readonly "timeline_event": Omit<typeof tablesSchema.schemaType.tables["timelineEvent"], "accessorName"> & { readonly accessorName: "timeline_event" };
+    /** @deprecated Use `transcriptRun` instead. This alias will be removed in the next major version. */
+    readonly "transcript_run": Omit<typeof tablesSchema.schemaType.tables["transcriptRun"], "accessorName"> & { readonly accessorName: "transcript_run" };
     /** @deprecated Use `transcriptSegment` instead. This alias will be removed in the next major version. */
     readonly "transcript_segment": Omit<typeof tablesSchema.schemaType.tables["transcriptSegment"], "accessorName"> & { readonly accessorName: "transcript_segment" };
   };
@@ -252,6 +276,7 @@ const tableAccessorAliases = {
   "incident_room": "incidentRoom",
   "investigation_request": "investigationRequest",
   "timeline_event": "timelineEvent",
+  "transcript_run": "transcriptRun",
   "transcript_segment": "transcriptSegment",
 } as const;
 
@@ -281,6 +306,8 @@ export type DbView = __DbViewBase & {
   readonly "investigation_request": __DbViewBase["investigationRequest"];
   /** @deprecated Use `timelineEvent` instead. This alias will be removed in the next major version. */
   readonly "timeline_event": __DbViewBase["timelineEvent"];
+  /** @deprecated Use `transcriptRun` instead. This alias will be removed in the next major version. */
+  readonly "transcript_run": __DbViewBase["transcriptRun"];
   /** @deprecated Use `transcriptSegment` instead. This alias will be removed in the next major version. */
   readonly "transcript_segment": __DbViewBase["transcriptSegment"];
 };
@@ -295,6 +322,8 @@ export type Tables = __TablesBase & {
   readonly "investigation_request": __TablesBase["investigationRequest"];
   /** @deprecated Use `timelineEvent` instead. This alias will be removed in the next major version. */
   readonly "timeline_event": __TablesBase["timelineEvent"];
+  /** @deprecated Use `transcriptRun` instead. This alias will be removed in the next major version. */
+  readonly "transcript_run": __TablesBase["transcriptRun"];
   /** @deprecated Use `transcriptSegment` instead. This alias will be removed in the next major version. */
   readonly "transcript_segment": __TablesBase["transcriptSegment"];
 };

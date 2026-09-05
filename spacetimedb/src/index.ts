@@ -42,6 +42,22 @@ const transcript_segment = table(
     text: t.string(),
     relevant: t.bool(),
     created_at: t.timestamp(),
+    // New columns stay at the end and carry defaults so existing Maincloud
+    // rows migrate as already-committed transcript segments.
+    interim_text: t.string().default(''),
+    is_final: t.bool().default(true),
+  }
+);
+
+// One database-backed lease prevents two commander tabs from starting the
+// paid voice simulation before the first transcript row becomes visible.
+const transcript_run = table(
+  { name: 'transcript_run', public: true },
+  {
+    room_id: t.string().primaryKey(),
+    run_id: t.string(),
+    presenter: t.identity(),
+    started_at: t.timestamp(),
   }
 );
 
@@ -157,6 +173,7 @@ const spacetimedb = schema({
   incident_room,
   participant,
   transcript_segment,
+  transcript_run,
   investigation_request,
   approval,
   agent_step,
@@ -889,6 +906,23 @@ export const appendTranscriptSegment = spacetimedb.reducer(
   (ctx, { roomId, sequence, speaker, text, relevant }) => {
     requireRoom(ctx, roomId);
     requireParticipant(ctx, roomId);
+
+    const existing = [...ctx.db.transcript_segment.room_id.filter(roomId)].find(
+      row => row.sequence === sequence
+    );
+    if (existing) {
+      if (
+        existing.speaker !== speaker ||
+        existing.text !== text ||
+        existing.relevant !== relevant
+      ) {
+        throw new SenderError(
+          `Transcript sequence ${sequence} already has different content in this room.`
+        );
+      }
+      return;
+    }
+
     ctx.db.transcript_segment.insert({
       id: 0n,
       room_id: roomId,
@@ -897,6 +931,147 @@ export const appendTranscriptSegment = spacetimedb.reducer(
       text,
       relevant,
       created_at: ctx.timestamp,
+      interim_text: '',
+      is_final: true,
+    });
+  }
+);
+
+export const acquireTranscriptRun = spacetimedb.reducer(
+  { roomId: t.string(), runId: t.string() },
+  (ctx, { roomId, runId }) => {
+    requireRoom(ctx, roomId);
+    requireCommander(ctx, roomId);
+    const cleanRunId = runId.trim();
+    if (!cleanRunId || cleanRunId.length > 128) {
+      throw new SenderError('Transcript run ID is invalid.');
+    }
+
+    const existing = ctx.db.transcript_run.room_id.find(roomId);
+    if (existing) {
+      if (existing.presenter.isEqual(ctx.sender) && existing.run_id === cleanRunId) return;
+      throw new SenderError('Another presenter tab is already streaming this room.');
+    }
+    ctx.db.transcript_run.insert({
+      room_id: roomId,
+      run_id: cleanRunId,
+      presenter: ctx.sender,
+      started_at: ctx.timestamp,
+    });
+  }
+);
+
+export const releaseTranscriptRun = spacetimedb.reducer(
+  { roomId: t.string(), runId: t.string() },
+  (ctx, { roomId, runId }) => {
+    requireRoom(ctx, roomId);
+    requireCommander(ctx, roomId);
+    const existing = ctx.db.transcript_run.room_id.find(roomId);
+    if (!existing) return;
+    if (!existing.presenter.isEqual(ctx.sender) || existing.run_id !== runId) {
+      throw new SenderError('Only the active presenter tab can release this transcript run.');
+    }
+    ctx.db.transcript_run.room_id.delete(roomId);
+  }
+);
+
+export const publishTranscriptResult = spacetimedb.reducer(
+  {
+    roomId: t.string(),
+    sequence: t.u32(),
+    speaker: t.string(),
+    text: t.string(),
+    relevant: t.bool(),
+    isFinal: t.bool(),
+  },
+  (ctx, { roomId, sequence, speaker, text, relevant, isFinal }) => {
+    requireRoom(ctx, roomId);
+    requireCommander(ctx, roomId);
+
+    const cleanText = text.trim();
+    if (!cleanText) return;
+
+    const existing = [...ctx.db.transcript_segment.room_id.filter(roomId)].find(
+      row => row.sequence === sequence
+    );
+    if (existing?.is_final) {
+      throw new SenderError(`Transcript sequence ${sequence} is already final.`);
+    }
+    if (
+      existing &&
+      (existing.speaker !== speaker || existing.relevant !== relevant)
+    ) {
+      throw new SenderError(
+        `Transcript sequence ${sequence} already belongs to a different speaker.`
+      );
+    }
+
+    if (!existing) {
+      ctx.db.transcript_segment.insert({
+        id: 0n,
+        room_id: roomId,
+        sequence,
+        speaker,
+        text: isFinal ? cleanText : '',
+        relevant,
+        created_at: ctx.timestamp,
+        interim_text: isFinal ? '' : cleanText,
+        is_final: false,
+      });
+      return;
+    }
+
+    ctx.db.transcript_segment.id.update({
+      ...existing,
+      // A final Deepgram result commits its time range exactly once. Interim
+      // hypotheses replace the mutable tail instead of being appended.
+      text: isFinal
+        ? [existing.text, cleanText].filter(Boolean).join(' ')
+        : existing.text,
+      interim_text: isFinal ? '' : cleanText,
+    });
+  }
+);
+
+export const finalizeTranscriptSegment = spacetimedb.reducer(
+  { roomId: t.string(), sequence: t.u32() },
+  (ctx, { roomId, sequence }) => {
+    requireRoom(ctx, roomId);
+    requireCommander(ctx, roomId);
+    const existing = [...ctx.db.transcript_segment.room_id.filter(roomId)].find(
+      row => row.sequence === sequence
+    );
+    if (!existing || existing.is_final) return;
+    if (!existing.text.trim()) {
+      throw new SenderError('Deepgram did not return a final transcript for this clip.');
+    }
+    ctx.db.transcript_segment.id.update({
+      ...existing,
+      interim_text: '',
+      is_final: true,
+    });
+  }
+);
+
+export const discardTranscriptInterim = spacetimedb.reducer(
+  { roomId: t.string(), sequence: t.u32() },
+  (ctx, { roomId, sequence }) => {
+    requireRoom(ctx, roomId);
+    requireCommander(ctx, roomId);
+    const existing = [...ctx.db.transcript_segment.room_id.filter(roomId)].find(
+      row => row.sequence === sequence
+    );
+    if (!existing || existing.is_final) return;
+    if (!existing.text.trim()) {
+      ctx.db.transcript_segment.id.delete(existing.id);
+      return;
+    }
+    // Preserve ranges Deepgram already marked final; only the mutable tail is
+    // discarded when playback or the upstream socket is interrupted.
+    ctx.db.transcript_segment.id.update({
+      ...existing,
+      interim_text: '',
+      is_final: true,
     });
   }
 );
@@ -913,6 +1088,14 @@ export const proposeInvestigation = spacetimedb.reducer(
   (ctx, args) => {
     requireRoom(ctx, args.roomId);
     requireParticipant(ctx, args.roomId);
+
+    const existing = [...ctx.db.investigation_request.room_id.filter(args.roomId)].find(
+      row => row.source_segment_id === args.sourceSegmentId
+        && row.prompt === args.prompt
+        && row.target_service === args.targetService
+    );
+    if (existing) return;
+
     ctx.db.investigation_request.insert({
       id: 0n,
       room_id: args.roomId,
@@ -1163,6 +1346,7 @@ export const resetDemo = spacetimedb.reducer(
 
     ctx.db.investigation_request.room_id.delete(roomId);
     ctx.db.transcript_segment.room_id.delete(roomId);
+    ctx.db.transcript_run.room_id.delete(roomId);
     ctx.db.timeline_event.room_id.delete(roomId);
     for (const person of [...ctx.db.participant.room_id.filter(roomId)]) {
       if (!person.identity.isEqual(ctx.sender)) {

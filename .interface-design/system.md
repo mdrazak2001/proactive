@@ -8,7 +8,7 @@ Domain vocabulary: war room, incident bridge, signal source, hypothesis, investi
 
 Color world: graphite equipment panels, warm paper-white incident notes, phosphor signal green, restrained amber review states, fault red, and steel-grey metadata.
 
-Signature interaction: a spoken or typed hypothesis visibly condenses into a canonical read-only investigation order, then remains tethered to the live computer steps and resulting evidence. In Share View, that relationship must remain legible at 720p.
+Signature interaction: **The Evidence Wake**. The spoken question stays canonical; its R42 underline draws one tether into a continuous evidence line. A single 44px refractive lens advances only when shared evidence rows arrive, then the evidence contracts into one concluding sentence. In Share View, that relationship must remain legible at 720p.
 
 Reject these defaults:
 
@@ -55,10 +55,12 @@ Reference influence: the supplied Supabase integration page informs calm dark hi
 
 - Landing: the hypothesis → approved plan → evidence transformation is the hero, not a generic product screenshot.
 - Integrations: the selected signal source and exact access boundary lead; provider catalogs are quiet supporting rows.
-- War Room: Agent Computer dominates. Transcript and audit trail are context.
-- Share View: current action, approved scope, and strongest evidence dominate; navigation and setup controls disappear.
+- War Room: the transcript is the application. One canonical spoken question opens a single inline investigation fold; there is no separate agent dashboard or sidebar.
+- Share View: conversation → question → evidence → answer stays readable in one centered document at 1280×720. The active quote and its inline evidence dominate; navigation, setup chrome, and agent-step theatre disappear.
 
 ## Reusable components
+
+- Evidence Wake: one flat inline fold attached directly to the active transcript quote; a compact approval rail, one one-shot Bézier tether, one continuous SVG evidence trace, and one 44px refractive GlassSurface lens. The lens is the only glass material. Row arrival—not local timers—moves it, while prior evidence recedes and assembles into the final sentence.
 
 - Primary action: 44px minimum height, 6px radius, 14px/600, signal-green fill on dark; hover changes lightness, active scales to .97, visible focus ring.
 - Secondary action: 40–44px height, transparent/raised surface, quiet border, primary text.

@@ -119,6 +119,14 @@ export const TimelineEvent = __t.object("TimelineEvent", {
 });
 export type TimelineEvent = __Infer<typeof TimelineEvent>;
 
+export const TranscriptRun = __t.object("TranscriptRun", {
+  roomId: __t.string(),
+  runId: __t.string(),
+  presenter: __t.identity(),
+  startedAt: __t.timestamp(),
+});
+export type TranscriptRun = __Infer<typeof TranscriptRun>;
+
 export const TranscriptSegment = __t.object("TranscriptSegment", {
   id: __t.u64(),
   roomId: __t.string(),
@@ -127,6 +135,8 @@ export const TranscriptSegment = __t.object("TranscriptSegment", {
   text: __t.string(),
   relevant: __t.bool(),
   createdAt: __t.timestamp(),
+  interimText: __t.string(),
+  isFinal: __t.bool(),
 });
 export type TranscriptSegment = __Infer<typeof TranscriptSegment>;
 
