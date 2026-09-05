@@ -18,12 +18,10 @@ export interface LiveMeetingStageProps {
   activeSequence: number | null;
   playing: boolean;
   connected: boolean;
-  canControl: boolean;
   started: boolean;
   busy: boolean;
   getAnalyser: () => AnalyserNode | undefined;
   onStart: () => void;
-  onReset: () => void;
 }
 
 export default function LiveMeetingStage({
@@ -35,7 +33,6 @@ export default function LiveMeetingStage({
   busy,
   getAnalyser,
   onStart,
-  onReset,
 }: LiveMeetingStageProps) {
   const reducedMotion = Boolean(useReducedMotion());
 
@@ -61,11 +58,7 @@ export default function LiveMeetingStage({
           <span className="meeting-stage__scope">CHECKOUT · R42 · SEV-1</span>
         </div>
         <div className="meeting-stage__control">
-          {started ? (
-            <button type="button" onClick={onReset}>
-              Reset transcript
-            </button>
-          ) : (
+          {started ? null : (
             <button type="button" disabled={busy} onClick={onStart}>
               {playing ? 'Streaming…' : 'Start transcript'}
             </button>

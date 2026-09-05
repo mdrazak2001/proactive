@@ -116,7 +116,6 @@ function App() {
     [requests]
   );
   const request = roomRequests.length > 0 ? roomRequests[roomRequests.length - 1] : undefined;
-  const isCommander = role === 'Incident commander';
 
   useEffect(() => {
     if (!connected || room || roomRequested.current) return;
@@ -317,12 +316,10 @@ function App() {
           activeSequence={activeSequence}
           playing={playing}
           connected={connected}
-          canControl={isCommander}
           started={playing || roomSegments.length > 0 || Boolean(activeTranscriptRun)}
           busy={playing}
           getAnalyser={getAnalyser}
           onStart={() => void playIncident()}
-          onReset={() => void handleReset()}
         />
       </div>
 

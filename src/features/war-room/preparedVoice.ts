@@ -86,6 +86,15 @@ export const preparedClips = [
     scene: 'promise-check',
     src: '/demo/voice/07-sienna.wav',
   },
+  {
+    sequence: 8,
+    speakerId: 'sienna',
+    speaker: 'Sienna · Payments',
+    text: 'We promised SSO by October. SCIM was never committed, so I will draft the correction around that.',
+    relevant: false,
+    scene: 'promise-check',
+    src: '/demo/voice/08-sienna.wav',
+  },
 ] as const;
 
 export type PreparedClip = (typeof preparedClips)[number];

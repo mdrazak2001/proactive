@@ -11,15 +11,16 @@ const MONTHS = [
 ];
 
 /**
- * One spoken question becomes one pass over the account's commitment history:
- * the SSO promise resolves on the October tick, the SCIM lane ends empty.
+ * Sienna's question opens a pass over Acme's commitment history. The SSO
+ * promise resolves on the October tick, SCIM ends empty, and the aperture
+ * pins that finding so her next line can say the correction out loud.
  */
 export default function PromiseCheckScene({ beat, reducedMotion }: SceneProps) {
   const [contracted, setContracted] = useState(false);
   const searched = beat >= 1;
 
   useEffect(() => {
-    if (!searched) {
+    if (beat < 1) {
       setContracted(false);
       return;
     }
@@ -29,7 +30,7 @@ export default function PromiseCheckScene({ beat, reducedMotion }: SceneProps) {
     }
     const timer = window.setTimeout(() => setContracted(true), 2400);
     return () => window.clearTimeout(timer);
-  }, [reducedMotion, searched]);
+  }, [beat, reducedMotion]);
 
   const duration = reducedMotion ? 0 : undefined;
 
