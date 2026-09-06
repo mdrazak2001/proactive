@@ -24,7 +24,7 @@ function JoinScreen({ connected, onJoin }: {
   connected: boolean;
   onJoin: (name: string, role: string) => void;
 }) {
-  const [name, setName] = useState('Mohammed');
+  const [name, setName] = useState('');
   const [role, setRole] = useState('Incident commander');
 
   const submit = (event: FormEvent) => {
@@ -47,7 +47,13 @@ function JoinScreen({ connected, onJoin }: {
         <form onSubmit={submit}>
           <label>
             Display name
-            <input value={name} onChange={event => setName(event.target.value)} autoFocus />
+            <input
+              value={name}
+              onChange={event => setName(event.target.value)}
+              autoComplete="nickname"
+              autoFocus
+              placeholder="Your name"
+            />
           </label>
           <fieldset>
             <legend>Your role</legend>
@@ -77,7 +83,7 @@ function JoinScreen({ connected, onJoin }: {
 function App() {
   const { isActive: connected } = useSpacetimeDB();
   const [joined, setJoined] = useState(() => sessionStorage.getItem('proactive_joined') === 'true');
-  const [displayName, setDisplayName] = useState(() => sessionStorage.getItem('proactive_name') ?? 'Mohammed');
+  const [displayName, setDisplayName] = useState(() => sessionStorage.getItem('proactive_name') ?? '');
   const [role, setRole] = useState(() => sessionStorage.getItem('proactive_role') ?? 'Incident commander');
   const [playing, setPlaying] = useState(false);
   const [activeSequence, setActiveSequence] = useState<number | null>(null);
