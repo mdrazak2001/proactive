@@ -5,10 +5,13 @@ import {
   Radio,
   ShieldCheck,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthProvider';
 import './LandingPage.css';
+
+const WAITLIST_INTENT_KEY = 'proactive_waitlist_intent';
+const WAITLIST_RETURN_PATH = '/';
 
 const signalSources = [
   'Supabase',
@@ -45,18 +48,27 @@ function LandingAuthAction({ placement }: { placement: 'header' | 'hero' }) {
     : 'landing-button landing-button--primary';
 
   if (user) {
+    if (placement === 'header') {
+      return (
+        <span className="landing-header__action landing-header__action--joined">
+          <Check aria-hidden="true" size={15} strokeWidth={1.8} />
+          On the waitlist
+        </span>
+      );
+    }
+
     return (
-      <Link className={className} to="/app/integrations">
-        Open console
-        <ArrowRight aria-hidden="true" size={placement === 'header' ? 15 : 16} strokeWidth={1.8} />
-      </Link>
+      <p className="landing-waitlist-status">
+        <Check aria-hidden="true" size={16} strokeWidth={1.8} />
+        You’re on the waitlist. We’ll write when a seat opens.
+      </p>
     );
   }
 
   if (!configured) {
     return (
       <button
-        aria-label="Sign-in unavailable because authentication is not configured"
+        aria-label="Waitlist unavailable because authentication is not configured"
         className={className}
         disabled
         title="Authentication setup is incomplete"
@@ -67,13 +79,15 @@ function LandingAuthAction({ placement }: { placement: 'header' | 'hero' }) {
     );
   }
 
-  const beginSignIn = async () => {
+  const beginWaitlist = async () => {
     setPending(true);
     setRedirectError('');
     try {
-      await signInWithGoogle('/app/integrations');
+      sessionStorage.setItem(WAITLIST_INTENT_KEY, '1');
+      await signInWithGoogle(WAITLIST_RETURN_PATH);
     } catch (signInError) {
-      setRedirectError(signInError instanceof Error ? signInError.message : 'Could not open sign in.');
+      sessionStorage.removeItem(WAITLIST_INTENT_KEY);
+      setRedirectError(signInError instanceof Error ? signInError.message : 'Could not open Google to join the waitlist.');
     } finally {
       setPending(false);
     }
@@ -84,24 +98,20 @@ function LandingAuthAction({ placement }: { placement: 'header' | 'hero' }) {
   return (
     <>
       <button
-        aria-label={placement === 'header'
-          ? 'Sign in with Google'
-          : 'Sign up or sign in with Google'}
+        aria-label="Join the Proactive waitlist with Google"
         className={className}
         disabled={loading || pending}
-        onClick={() => void beginSignIn()}
+        onClick={() => void beginWaitlist()}
         title={actionError || undefined}
         type="button"
       >
         {pending
-          ? 'Opening sign in…'
+          ? 'Opening Google…'
           : loading
             ? 'Checking session…'
             : actionError
-              ? 'Try sign in'
-              : placement === 'header'
-                ? 'Sign in'
-                : 'Sign up with Google'}
+              ? 'Try again'
+              : 'Join waitlist'}
         <ArrowRight aria-hidden="true" size={placement === 'header' ? 15 : 16} strokeWidth={1.8} />
       </button>
       <span aria-live="polite" className="landing-visually-hidden" role="status">
@@ -112,6 +122,22 @@ function LandingAuthAction({ placement }: { placement: 'header' | 'hero' }) {
 }
 
 export default function LandingPage() {
+  const { user } = useAuth();
+  const [waitlistNotice, setWaitlistNotice] = useState('');
+
+  useEffect(() => {
+    if (!user) return;
+    if (sessionStorage.getItem(WAITLIST_INTENT_KEY) !== '1') return;
+    sessionStorage.removeItem(WAITLIST_INTENT_KEY);
+    setWaitlistNotice('We’ll write when a seat opens.');
+  }, [user]);
+
+  useEffect(() => {
+    if (!waitlistNotice) return;
+    const timer = window.setTimeout(() => setWaitlistNotice(''), 7000);
+    return () => window.clearTimeout(timer);
+  }, [waitlistNotice]);
+
   return (
     <div className="proactive-landing">
       <header className="landing-header">
@@ -362,6 +388,19 @@ export default function LandingPage() {
           <Link to="/app/integrations">Signal sources</Link>
         </nav>
       </footer>
+
+      {waitlistNotice && (
+        <div className="landing-waitlist-notice" role="status">
+          <Check aria-hidden="true" size={18} strokeWidth={1.8} />
+          <div>
+            <strong>Waitlist joined</strong>
+            <span>{waitlistNotice}</span>
+          </div>
+          <button type="button" onClick={() => setWaitlistNotice('')} aria-label="Dismiss waitlist confirmation">
+            ×
+          </button>
+        </div>
+      )}
     </div>
   );
 }

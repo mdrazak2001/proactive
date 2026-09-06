@@ -173,6 +173,16 @@ body {
   background: var(--landing-console);
 }
 
+.landing-header__action--joined {
+  cursor: default;
+  color: var(--landing-muted);
+  pointer-events: none;
+}
+
+.landing-header__action--joined svg {
+  color: var(--landing-signal);
+}
+
 .landing-hero {
   width: min(1320px, calc(100% - 40px));
   margin: 0 auto;
@@ -241,6 +251,80 @@ body {
   flex-wrap: wrap;
   gap: 12px;
   margin-top: 32px;
+}
+
+.landing-waitlist-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--landing-muted);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.landing-waitlist-status svg {
+  flex: 0 0 auto;
+  color: var(--landing-signal);
+}
+
+.landing-waitlist-notice {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 30;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 12px;
+  width: min(360px, calc(100% - 32px));
+  padding: 14px 14px 14px 16px;
+  border: 1px solid var(--landing-line);
+  border-radius: 10px;
+  color: var(--landing-paper);
+  background: var(--landing-raised);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.38);
+}
+
+.landing-waitlist-notice svg {
+  margin-top: 2px;
+  color: var(--landing-signal);
+}
+
+.landing-waitlist-notice strong,
+.landing-waitlist-notice span {
+  display: block;
+}
+
+.landing-waitlist-notice strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.landing-waitlist-notice span {
+  margin-top: 4px;
+  color: var(--landing-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.landing-waitlist-notice button {
+  appearance: none;
+  width: 28px;
+  height: 28px;
+  margin: -4px -4px 0 0;
+  border: 0;
+  border-radius: 6px;
+  color: var(--landing-quiet);
+  background: transparent;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.landing-waitlist-notice button:hover {
+  color: var(--landing-paper);
+  background: var(--landing-line-soft);
 }
 
 .landing-button {
@@ -884,6 +968,10 @@ body {
     display: none;
   }
 
+  .landing-header__action--joined svg {
+    display: block;
+  }
+
   .landing-hero {
     padding-top: 56px;
     padding-bottom: 64px;
@@ -901,6 +989,11 @@ body {
 
   .landing-hero__actions {
     display: grid;
+  }
+
+  .landing-waitlist-notice {
+    right: 16px;
+    bottom: 16px;
   }
 
   .landing-button {

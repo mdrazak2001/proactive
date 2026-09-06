@@ -20,7 +20,7 @@ export default function AuthCallbackPage() {
         <span>AUTH SETUP REQUIRED</span>
         <h1>SpacetimeAuth is not configured.</h1>
         <p>Add the public OIDC client ID locally, then reload this callback.</p>
-        <Link to="/app/integrations">Return to integrations</Link>
+        <Link to="/">Return home</Link>
       </main>
     );
   }
@@ -31,7 +31,7 @@ export default function AuthCallbackPage() {
         <CheckCircle2 size={24} aria-hidden="true" />
         <span>IDENTITY VERIFIED</span>
         <h1>Google sign-in complete.</h1>
-        <p>Opening the connector console…</p>
+        <p>Returning you to Proactive…</p>
       </main>
     );
   }
@@ -42,7 +42,7 @@ export default function AuthCallbackPage() {
       <span>VERIFYING IDENTITY</span>
       <h1>{error || timedOut ? 'The sign-in did not complete.' : 'Finishing Google sign-in.'}</h1>
       <p>{error || (timedOut ? 'The callback may be missing from the SpacetimeAuth redirect allow list.' : 'Exchanging the authorization code and restoring your session…')}</p>
-      {timedOut && <Link to="/app/integrations">Return to integrations</Link>}
+      {timedOut && <Link to="/">Return home</Link>}
     </main>
   );
 }
