@@ -272,20 +272,20 @@ function ConnectorSetupForm({
             />
           </label>
           <label>
-            <span>Read-only table (schema.table)</span>
+            <span>Read-only tables (schema.table, comma-separated)</span>
             <input
               value={sourceTable}
-              onChange={event => setSourceTable(event.target.value.toLowerCase())}
-              placeholder="public.proactive_events"
-              pattern="[a-z_][a-z0-9_]{0,62}\.[a-z_][a-z0-9_]{0,62}"
+              onChange={event => setSourceTable(event.target.value.toLowerCase().replace(/\s+/g, ''))}
+              placeholder="public.proactive_events,public.incident_notes"
+              pattern="[a-z_][a-z0-9_]{0,62}\.[a-z_][a-z0-9_]{0,62}(,[a-z_][a-z0-9_]{0,62}\.[a-z_][a-z0-9_]{0,62})*"
               readOnly={supabaseMode === 'publishable'}
               required
               disabled={disabled}
             />
             <small>
               {supabaseMode === 'publishable'
-                ? 'Demo mode accepts only the public schema. Its occurred_at column must be intentionally readable by the anon role through RLS.'
-                : 'Verification reads one occurred_at timestamp; samples return at most five timestamps.'}
+                ? 'Demo mode accepts only public.proactive_events. Switch to a scoped token to point at any public tables without a code deploy.'
+                : 'Reconnect anytime with a different project or table list. Verification reads occurred_at on each table; no git push required.'}
             </small>
           </label>
           {supabaseMode === 'publishable' && (

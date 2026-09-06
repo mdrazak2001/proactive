@@ -71,6 +71,14 @@ export function validSchemaTable(value: string): boolean {
   return /^[a-z_][a-z0-9_]{0,62}\.[a-z_][a-z0-9_]{0,62}$/.test(value);
 }
 
+/** One table or a comma-separated list, e.g. public.events,public.alerts */
+export function parseSchemaTables(value: string): string[] {
+  return value
+    .split(',')
+    .map(item => item.trim().toLowerCase())
+    .filter(Boolean);
+}
+
 export function quoteSchemaTable(value: string): string {
   const [schema, table] = value.split('.');
   if (!schema || !table || !validSchemaTable(value)) {

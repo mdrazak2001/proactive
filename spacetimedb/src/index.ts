@@ -341,6 +341,22 @@ function firstIsoDate(rows: Record<string, unknown>[], keys: string[]) {
   return undefined;
 }
 
+function parseSourceTables(value: string): string[] {
+  const tables = value
+    .split(',')
+    .map(item => item.trim().toLowerCase())
+    .filter(Boolean);
+  if (!tables.length) {
+    throw new SenderError('Use a schema-qualified table such as public.proactive_events.');
+  }
+  for (const table of tables) {
+    if (!SCHEMA_TABLE.test(table)) {
+      throw new SenderError('Use schema-qualified tables such as public.proactive_events, comma-separated.');
+    }
+  }
+  return tables;
+}
+
 function quoteSchemaTable(value: string) {
   if (!SCHEMA_TABLE.test(value)) {
     throw new SenderError('Use a schema-qualified Supabase table such as public.proactive_events.');
@@ -550,13 +566,22 @@ function runSavedConnector(
   const secret = safeJson(row.secret_json, provider);
   const settings = safeJson(row.settings_json, provider);
   if (provider === 'supabase') {
-    return readSupabase(
-      ctx,
-      String(secret.accessToken ?? ''),
-      String(settings.projectRef ?? ''),
-      String(settings.sourceTable ?? ''),
-      limit
+    const tables = parseSourceTables(String(settings.sourceTable ?? ''));
+    const samples = tables.map(table =>
+      readSupabase(
+        ctx,
+        String(secret.accessToken ?? ''),
+        String(settings.projectRef ?? ''),
+        table,
+        limit
+      )
     );
+    return {
+      kind: samples[0]?.kind ?? 'configured-table-access',
+      count: samples.reduce((total, sample) => total + sample.count, 0),
+      table: tables.join(','),
+      latestAt: samples.map(sample => sample.latestAt).find(Boolean),
+    };
   }
   return readLangSmith(
     ctx,
@@ -657,7 +682,6 @@ export const connectSupabase = spacetimedb.procedure(
   (ctx, { accessToken, projectRef, sourceTable }) => {
     const token = assertCredential(accessToken, 'Supabase');
     const project = projectRef.trim();
-    const tableName = sourceTable.trim().toLowerCase();
     const isScopedToken = SUPABASE_SCOPED_TOKEN.test(token);
     const isPublishableKey = SUPABASE_PUBLISHABLE_KEY.test(token);
     if (!isScopedToken && !isPublishableKey) {
@@ -666,18 +690,27 @@ export const connectSupabase = spacetimedb.procedure(
     if (!SUPABASE_PROJECT_REF.test(project)) {
       throw new SenderError('Supabase project ref is not valid.');
     }
-    if (!SCHEMA_TABLE.test(tableName)) {
-      throw new SenderError('Use a schema-qualified table such as public.proactive_events.');
+    const tables = parseSourceTables(sourceTable);
+    if (isPublishableKey) {
+      if (tables.length !== 1) {
+        throw new SenderError('Publishable-key connections accept one public table.');
+      }
+      publicTableName(tables[0] ?? '');
     }
-    if (isPublishableKey) publicTableName(tableName);
     const authMode: SupabaseAuthMode = isPublishableKey ? 'publishable_rls' : 'scoped_platform';
     takeConnectorRequestSlot(ctx, 'supabase');
-    const sample = readSupabase(ctx, token, project, tableName, 1);
+    const samples = tables.map(table => readSupabase(ctx, token, project, table, 1));
+    const sample = {
+      kind: samples[0]?.kind ?? 'configured-table-access',
+      count: samples.reduce((total, item) => total + item.count, 0),
+      table: tables.join(','),
+      latestAt: samples.map(item => item.latestAt).find(Boolean),
+    };
     saveConnector(
       ctx,
       'supabase',
       JSON.stringify({ accessToken: token }),
-      JSON.stringify({ projectRef: project, sourceTable: tableName, authMode }),
+      JSON.stringify({ projectRef: project, sourceTable: tables.join(','), authMode }),
       sample
     );
     return JSON.stringify(receipt('supabase', ctx.timestamp.toISOString(), sample, 'verified', authMode));

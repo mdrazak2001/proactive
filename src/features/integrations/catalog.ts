@@ -48,7 +48,7 @@ export const providers: ProviderManifest[] = [
     capabilities: ['database.health', 'data.query_bounded'],
     configurationKeys: ['SUPABASE_ACCESS_TOKEN', 'SUPABASE_PROJECT_REF', 'SUPABASE_SOURCE_TABLE'],
     signatureQuestion: 'Did the incident coincide with a database, function, or auth failure?',
-    safetyNote: 'Publishable mode is only for the supplied sanitized RLS table and exposes its timestamp column to anon. Scoped-token mode stays fixed to this table through Supabase’s read-only role.',
+    safetyNote: 'Publishable mode is only for the supplied sanitized RLS table. Scoped-token mode can point at a comma-separated table list from the Connect form or SUPABASE_SOURCE_TABLE, with no code deploy.',
     docsUrl: 'https://supabase.com/docs/reference/api/v1-read-only-query',
   },
   {

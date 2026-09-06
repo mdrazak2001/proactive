@@ -3,6 +3,7 @@ import { upstreamJson } from '../upstream.js';
 import {
   configurationError,
   firstIsoDate,
+  parseSchemaTables,
   quoteSchemaTable,
   recordsFrom,
   safeHttpBaseUrl,
@@ -15,7 +16,7 @@ const PROJECT_REF = /^[a-z0-9]{8,64}$/;
 export function createSupabaseConnector(config: BrokerConfig): Connector {
   const provider = 'Supabase';
   const credentialBoundary = 'provider-enforced read-only database role';
-  const scope = ['project:read', 'database:read', 'configured table only'];
+  const scope = ['project:read', 'database:read', 'configured table list'];
 
   function configuration() {
     const configured = Boolean(
@@ -23,10 +24,12 @@ export function createSupabaseConnector(config: BrokerConfig): Connector {
         config.supabase.projectRef &&
         config.supabase.sourceTable,
     );
+    const tables = parseSchemaTables(config.supabase.sourceTable);
     const valid = Boolean(
       configured &&
         PROJECT_REF.test(config.supabase.projectRef ?? '') &&
-        validSchemaTable(config.supabase.sourceTable) &&
+        tables.length > 0 &&
+        tables.every(validSchemaTable) &&
         safeHttpBaseUrl(config.supabase.baseUrl),
     );
     return { configured, valid };
@@ -38,7 +41,7 @@ export function createSupabaseConnector(config: BrokerConfig): Connector {
     return {
       token: config.supabase.accessToken as string,
       projectRef: config.supabase.projectRef as string,
-      table: config.supabase.sourceTable,
+      tables: parseSchemaTables(config.supabase.sourceTable),
       baseUrl: safeHttpBaseUrl(config.supabase.baseUrl) as string,
     };
   }
@@ -55,25 +58,29 @@ export function createSupabaseConnector(config: BrokerConfig): Connector {
     includeTimestamp: boolean,
   ) {
     const current = settings();
-    const table = quoteSchemaTable(current.table);
-    const projection = includeTimestamp ? '"occurred_at"' : '1 as "reachable"';
-    const ordering = includeTimestamp ? ' order by "occurred_at" desc' : '';
-    const raw = await upstreamJson(
-      `${current.baseUrl}/v1/projects/${encodeURIComponent(current.projectRef)}/database/query/read-only`,
-      {
-        method: 'POST',
-        headers: {
-          ...headers(current.token),
-          'content-type': 'application/json',
+    const combined: Record<string, unknown>[] = [];
+    for (const tableName of current.tables) {
+      const table = quoteSchemaTable(tableName);
+      const projection = includeTimestamp ? '"occurred_at"' : '1 as "reachable"';
+      const ordering = includeTimestamp ? ' order by "occurred_at" desc' : '';
+      const raw = await upstreamJson(
+        `${current.baseUrl}/v1/projects/${encodeURIComponent(current.projectRef)}/database/query/read-only`,
+        {
+          method: 'POST',
+          headers: {
+            ...headers(current.token),
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({
+            query: `select ${projection} from ${table}${ordering} limit $1`,
+            parameters: [limit],
+          }),
         },
-        body: JSON.stringify({
-          query: `select ${projection} from ${table}${ordering} limit $1`,
-          parameters: [limit],
-        }),
-      },
-      { provider, config, acceptedStatuses: [200, 201] },
-    );
-    return recordsFrom(raw, ['result', 'data', 'rows']).slice(0, limit);
+        { provider, config, acceptedStatuses: [200, 201] },
+      );
+      combined.push(...recordsFrom(raw, ['result', 'data', 'rows']).slice(0, limit));
+    }
+    return combined.slice(0, limit);
   }
 
   async function verify(): Promise<ConnectorReceipt> {

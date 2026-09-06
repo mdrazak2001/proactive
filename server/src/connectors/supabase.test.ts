@@ -22,7 +22,7 @@ test('supabase rejects a service-role-shaped project ref and accepts a hosted re
     testConfig({
       SUPABASE_ACCESS_TOKEN: 'sbp_test',
       SUPABASE_PROJECT_REF: 'tzjrmgrthhpcssljvgmc',
-      SUPABASE_SOURCE_TABLE: 'public.proactive_events',
+      SUPABASE_SOURCE_TABLE: 'public.proactive_events,public.incident_notes',
     }),
   );
   assert.deepEqual(valid.configuration(), { configured: true, valid: true });
